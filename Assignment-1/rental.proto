@@ -1,0 +1,215 @@
+syntax = "proto3";
+
+package rental;
+
+// ===
+// DSA612S Assignment 1
+// Rental Accommodation System
+// gRPC Service Contract
+//
+// Vers: v0.1(DRAFT)
+// Author: Sholm Van Wyk
+// Ballerina :2201.13.4
+// ===
+
+// LifeCycle
+
+enum PropertyStatus {
+    PROPERTY_STATUS_UNSPECIFIED = 0;
+    AVAILABLE = 1;
+    UNAVAILABLE = 2;
+    MAINTENANCE = 3;
+}
+
+// Roles
+
+enum UserRole {
+    USER_ROLE_UNSPECIFIED = 0;
+    HOST = 1;
+    GUEST = 2;
+}
+
+// Core
+
+// Host Listing
+message Property {
+    string property_id = 1;
+    string host_id = 2;
+    string name = 3;
+    string location = 4;
+    string region = 5;
+    string property_type = 6;
+    double price_per_night = 7;
+    PropertyStatus status = 8;
+}
+
+// User 
+
+message User {
+    string user_id = 1;
+    string name = 2;
+    string email = 3;
+    UserRole role = 4;
+}
+
+// Confirmed Booking
+message Booking {
+    string booking_id = 1;
+    string property_id = 2;
+    string guest_id = 3;
+    string check_in = 4;
+    string check_out = 5;
+    double total_cost = 6;
+    int32 nights = 7;
+}
+
+// ===
+// 1.(Add Property)
+// New Listings with ID indication
+// ===
+
+message AddPropertyRequest {
+    string host_id = 1;
+    string name = 2;
+    string location = 3;
+    string region = 4;
+    string property_type = 5;
+    double price_per_night = 6;
+    PropertyStatus status = 7;
+}
+
+message AddPropertyResponse {
+    bool success = 1;
+    string message = 2;
+    string property_id = 3;
+}
+
+// ===
+// 2. (User Creation)
+// Streams User messages
+// ===
+
+message CreateUsersResponse {
+    bool success = 1;
+    string message = 2;
+    int32 created_count = 3;
+    repeated string created_user_ids = 4;
+}
+
+// ===
+// 3. (Update Property)
+// Edit Listings
+// ===
+
+message UpdatePropertyRequest {
+    string property_id = 1;
+    string host_id = 2;
+    optional string name = 3;
+    optional string location = 4;
+    optional double price_per_night = 5;
+    optional PropertyStatus status = 6;
+}
+
+message UpdatePropertyResponse {
+    bool success = 1;
+    string message = 2;
+    Property property = 3;
+}
+
+// ===
+// 4. (Remove Property)
+// Delete Listings
+// ===
+
+message RemovePropertyRequest {
+    string property_id = 1;
+    string host_id = 2;
+}
+
+message PropertyList {
+    bool success = 1;
+    string message = 2;
+    string region = 3;
+    repeated Property properties = 4;
+    int32 count = 5;
+}
+
+// ===
+// 5. (Listing Properties)
+// Browsing List
+// ===
+
+message ListAvailableRequest {
+    optional string location = 1;
+    optional double min_price = 2;
+    optional double max_price = 3;
+}
+
+// ===
+// 6. (Search Properties)
+// Identify one Property
+// ===
+
+message SearchPropertyRequest {
+    string property_id = 1;
+}
+
+message SearchPropertyResponse {
+    bool found = 1;
+    string status_message = 2;
+    optional Property property = 3;
+}
+
+// ===
+// 7. (Book Property)
+// Requests dates with validation
+// ===
+
+message BookPropertyRequest {
+    string guest_id = 1;
+    string property_id = 2;
+    string check_in = 3;
+    string check_out = 4;
+}
+
+message BookPropertyResponse {
+    bool success = 1;
+    string message = 2;
+    string cart_item_id = 3;
+    int32 nights = 4;
+    double estimated_cost = 5;
+}
+
+// ===
+// 8. (Confirm Booking)
+// Booking Finals
+// ===
+
+message ConfirmBookingRequest {
+    string guest_id = 1;
+    string cart_item_id = 2;
+}
+
+message ConfirmBookingResponse {
+    bool success = 1;
+    string message = 2; 
+    optional Booking booking = 3;
+}
+
+// ===
+// SERVICE (Chunk by Chunk RPCs)
+// ===
+
+service RentalService {
+    rpc AddProperty(AddPropertyRequest) returns (AddPropertyResponse);
+    rpc CreateUsers(stream User) returns (CreateUsersResponse);
+    rpc UpdateProperty(UpdatePropertyRequest) returns (UpdatePropertyResponse);
+    rpc RemoveProperty(RemovePropertyRequest) returns (PropertyList);
+    rpc ListAvailableProperties(ListAvailableRequest) returns (stream Property);
+    rpc SearchProperty(SearchPropertyRequest) returns (SearchPropertyResponse);
+    rpc BookProperty(BookPropertyRequest) returns (BookPropertyResponse);
+    rpc ConfirmBooking(ConfirmBookingRequest) returns (ConfirmBookingResponse);
+}
+
+// This is just a draft expect changes in the system and open for discussion.
+// Point out any missing features required or fields that weren't covered.
