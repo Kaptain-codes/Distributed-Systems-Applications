@@ -1,6 +1,6 @@
 [package]
 org = "wykva"
-name = "Assignment_1"
+name = "libraryService"
 version = "0.1.0"
 distribution = "2201.13.4"
 
