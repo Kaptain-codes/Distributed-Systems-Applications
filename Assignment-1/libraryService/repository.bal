@@ -69,9 +69,13 @@ public isolated function getAsset(string assetTag) returns Asset|error {
 
 public isolated function getAssetsByStatus(AssetStatus status) returns Asset[] & readonly {
     lock {
-        return from var asset in assetTable
-               where asset.status == status
-               select asset.cloneReadOnly();
+        Asset[] matches = [];
+        foreach var asset in assetTable {
+            if asset.status == status {
+                matches.push(asset.cloneReadOnly());
+            }
+        }
+        return matches.cloneReadOnly();
     }
 }
 
@@ -178,22 +182,26 @@ public isolated function deleteAsset(string assetTag) returns Asset|error {
 public isolated function getAssetsByInstitution(string institutionId) returns Asset[] & readonly {
     lock {
         string searchCode = normalizeId(institutionId);
-
-        return from var asset in assetTable
-               where asset.institutionId == searchCode
-               select asset.cloneReadOnly();
-         
+        Asset[] matches = [];
+        foreach var asset in assetTable {
+            if asset.institutionId == searchCode {
+                matches.push(asset.cloneReadOnly());
+            }
+        }
+        return matches.cloneReadOnly();
     }
 }
 
 public isolated function getAssetsBySite(string site) returns Asset[] & readonly {
     lock {
         string standizedSite = normalizeText(site);
-
-        return from var asset in assetTable
-               where asset.site == standizedSite
-               select asset.cloneReadOnly();
-         
+        Asset[] matches = [];
+        foreach var asset in assetTable {
+            if asset.site == standizedSite {
+                matches.push(asset.cloneReadOnly());
+            }
+        }
+        return matches.cloneReadOnly();
     }
 }
 
@@ -201,11 +209,16 @@ public isolated function getAssetsByFilters(string? institutionId, string? site,
     string? cleanInstitutionId = institutionId is string ? normalizeId(institutionId) : ();
     string? cleanSite = site is string ? normalizeId(site) : ();
     lock {
-        return from var asset in assetTable
-            where (cleanInstitutionId is () || asset.institutionId == cleanInstitutionId)
-               && (cleanSite is () || asset.site == cleanSite)
-               && (status is () || asset.status == status)
-            select asset.cloneReadOnly();
+        Asset[] matches = [];
+        foreach var asset in assetTable {
+            boolean institutionMatches = cleanInstitutionId is () || asset.institutionId == cleanInstitutionId;
+            boolean siteMatches = cleanSite is () || asset.site == cleanSite;
+            boolean statusMatches = status is () || asset.status == status;
+            if institutionMatches && siteMatches && statusMatches {
+                matches.push(asset.cloneReadOnly());
+            }
+        }
+        return matches.cloneReadOnly();
     }
 }
 
@@ -237,28 +250,29 @@ public isolated function getMaintenanceSchedule(string assetTag, string schedule
                 reason = string `Asset tag not found`);
         }
 
-        Schedule[] matching = from var schedule in existingAsset.schedules
-                              where schedule.scheduleId == cleanScheduleId
-                              select schedule;
-                 
-        if matching.length() == 0 {
-            return error(string `Schedule with ID '${scheduleId}' not found for asset '${cleanTag}'`);
+        foreach var schedule in existingAsset.schedules {
+            if schedule.scheduleId == cleanScheduleId {
+                return schedule.cloneReadOnly();
+            }
         }
-        
-        return matching[0].cloneReadOnly();
+        return error(string `Schedule with ID '${scheduleId}' not found for asset '${cleanTag}'`);
     }
 }
 
 public isolated function findOverdueAssets() returns Asset[] & readonly {
     lock {
         time:Utc currentTime = time:utcNow(); 
-
-        return from var asset in assetTable
-                where ( from var schedule in asset.schedules 
-                        where ( schedule.scheduleStatus == ACTIVE || schedule.scheduleStatus == PENDING) && 
-                                schedule.dueDate < currentTime // Compares two numbers instantly!
-                                select schedule).length() > 0
-            select asset.cloneReadOnly();
+        Asset[] matches = [];
+        foreach var asset in assetTable {
+            foreach var schedule in asset.schedules {
+                if (schedule.scheduleStatus == ACTIVE || schedule.scheduleStatus == PENDING) &&
+                    schedule.dueDate < currentTime {
+                    matches.push(asset.cloneReadOnly());
+                    break;
+                }
+            }
+        }
+        return matches.cloneReadOnly();
     }
 }
 public isolated function scheduleForMaintenance(string assetTag, Schedule schedule) returns Asset|error {
@@ -416,9 +430,16 @@ public isolated function cancelMaintenance(string assetTag, string scheduleId) r
 
 public isolated function getAssetByRoutineService() returns Asset[] & readonly {
     lock {
-        return from var asset in assetTable
-           where asset.schedules.some(schedule => schedule.scheduleType == ROUTINE_SERVICE)
-           select asset.cloneReadOnly();
+        Asset[] matches = [];
+        foreach var asset in assetTable {
+            foreach var schedule in asset.schedules {
+                if schedule.scheduleType == ROUTINE_SERVICE {
+                    matches.push(asset.cloneReadOnly());
+                    break;
+                }
+            }
+        }
+        return matches.cloneReadOnly();
     }
     
 }
@@ -557,9 +578,13 @@ public isolated function returnAsset(string assetTag, string scheduleId) returns
 
 public isolated function getComponents() returns Component[] & readonly {
     lock {
-        return  from var asset in assetTable
-                from var comp in asset.components
-                select comp.cloneReadOnly();
+        Component[] matches = [];
+        foreach var asset in assetTable {
+            foreach var comp in asset.components {
+                matches.push(comp.cloneReadOnly());
+            }
+        }
+        return matches.cloneReadOnly();
     }
 }
 
@@ -721,10 +746,13 @@ public isolated function updateWorkOrder(string assetTag, string workOrderId, Wo
                         }
                     }
 
-                    Schedule[] activeRepairs = from var schedule in existingAsset.schedules
-                                            where (schedule.scheduleType == MAINTENANCE || schedule.scheduleType == ROUTINE_SERVICE) &&
-                                                    (schedule.scheduleStatus == PENDING || schedule.scheduleStatus == ACTIVE || schedule.scheduleStatus == OVERDUE)
-                                            select schedule;
+                    Schedule[] activeRepairs = [];
+                    foreach var schedule in existingAsset.schedules {
+                        if (schedule.scheduleType == MAINTENANCE || schedule.scheduleType == ROUTINE_SERVICE) &&
+                            (schedule.scheduleStatus == PENDING || schedule.scheduleStatus == ACTIVE || schedule.scheduleStatus == OVERDUE) {
+                            activeRepairs.push(schedule);
+                        }
+                    }
 
                     if activeRepairs.length() == 0 {
                         existingAsset.status = AVAILABLE;
@@ -805,10 +833,13 @@ public isolated function completeWorkOrder(string assetTag, string workOrderId) 
                 reason = string `Transaction Rejected: Schedule ID  not found for Work Order '${cleanWorkOrderId}'.`);
         }
 
-        Schedule[] activeRepairs = from var schedule in existingAsset.schedules
-            where schedule.scheduleType == MAINTENANCE &&
-                (schedule.scheduleStatus == PENDING || schedule.scheduleStatus == ACTIVE || schedule.scheduleStatus == OVERDUE)
-            select schedule;
+        Schedule[] activeRepairs = [];
+        foreach var schedule in existingAsset.schedules {
+            if schedule.scheduleType == MAINTENANCE &&
+                (schedule.scheduleStatus == PENDING || schedule.scheduleStatus == ACTIVE || schedule.scheduleStatus == OVERDUE) {
+                activeRepairs.push(schedule);
+            }
+        }
 
         if activeRepairs.length() == 0 {
             existingAsset.status = AVAILABLE;
@@ -1094,9 +1125,12 @@ public isolated function removeInstitution(string institutionId) returns Institu
     // Phase 2: Check ownership/dependencies in asset table
     int ownedCount;
     lock {
-        ownedCount = (from Asset asset in assetTable
-                      where asset.institutionId == cleanId
-                      select asset).length();
+        ownedCount = 0;
+        foreach var asset in assetTable {
+            if asset.institutionId == cleanId {
+                ownedCount += 1;
+            }
+        }
     }
     if ownedCount > 0 {
         return error InstitutionInUseError(
@@ -1118,9 +1152,12 @@ public isolated function removeInstitution(string institutionId) returns Institu
     // Phase 4: Compensate if an asset was added referencing this institution during the race window
     int postRemovalOwnedCount;
     lock {
-        postRemovalOwnedCount = (from Asset asset in assetTable
-                                  where asset.institutionId == cleanId
-                                  select asset).length();
+        postRemovalOwnedCount = 0;
+        foreach var asset in assetTable {
+            if asset.institutionId == cleanId {
+                postRemovalOwnedCount += 1;
+            }
+        }
     }
     if postRemovalOwnedCount > 0 {
         lock {
@@ -1135,4 +1172,3 @@ public isolated function removeInstitution(string institutionId) returns Institu
 
     return removed.cloneReadOnly();
 }
-
