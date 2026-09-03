@@ -30,10 +30,6 @@ service /assets on httpListener {
 
     isolated resource function get overdue() returns http:Ok|http:InternalServerError|http:NotFound {
         Asset[] result = findOverdueAssets();
-        if result.length() == 0 {
-            return <http:NotFound>{body: string `No overdue assets found.`};
-        }
-
         return <http:Ok>{body: result};
     }
     isolated resource function get [string assetTag]() returns http:Ok|http:InternalServerError|http:NotFound {
@@ -75,38 +71,22 @@ service /assets on httpListener {
     
     isolated resource function get .() returns http:Ok|http:InternalServerError {
         Asset[] result = getAllAssets();
-        if result.length() == 0 {
-            return <http:Ok>{body: string `No assets found.`};
-        }
-
         return <http:Ok>{body: result};
     }
 
     // Filtering assets by institutionId and site
     isolated resource function get institute(string institutionId) returns http:Ok|http:InternalServerError|http:NotFound {
         Asset[] result = getAssetsByInstitution(institutionId);
-        if result.length() == 0 {
-            return <http:NotFound>{body: string `No assets found with institution ID: ${institutionId}`};
-        }
-
         return <http:Ok>{body: result};
     }
 
     isolated resource function get site(string site) returns http:Ok|http:NotFound|http:InternalServerError {
         Asset[] result = getAssetsBySite(site);
-        if result.length() == 0 {
-            return <http:NotFound>{body: string `No assets found with site: ${site}`};
-        }
-
         return <http:Ok>{body: result};
     }
     
     isolated resource function get status(AssetStatus status) returns http:Ok|http:InternalServerError|http:NotFound {
         Asset[] result = getAssetsByStatus(status);
-        if result.length() == 0 {
-            return <http:NotFound>{body: string `No assets found with status: ${status}`};
-        }
-
         return <http:Ok>{body: result};
         
     }
@@ -121,10 +101,6 @@ service /assets on httpListener {
     }
 
     Asset[] result = getAssetsByFilters(institutionId, site, status);
-    if result.length() == 0 {
-        return <http:NotFound>{body: string `No assets found with the provided filters.`};
-    }
-
     return <http:Ok>{body: result};
 }
 
@@ -321,10 +297,6 @@ service /institutions on httpListener {
     }
     isolated resource function get .() returns http:Ok|http:InternalServerError|http:NotFound {
         Institution[] result = getAllInstitutions();
-        if result.length() == 0 {
-            return <http:NotFound>{body: "No institutions found"};
-        }
-
         return <http:Ok>{body: result};
     }
     isolated resource function get [string id]() returns http:Ok|http:InternalServerError|http:NotFound {
