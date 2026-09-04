@@ -1,6 +1,7 @@
 import ballerina/http;
 import ballerina/io;
 import ballerina/time;
+import ballerina/url;
 
 public enum AssetStatus {
     AVAILABLE,
@@ -133,10 +134,17 @@ function campusView(http:Client backend) returns error? {
     io:println("Site: (blank to skip): ");
     string site = io:readln();
 
-    string path = string `/assets/filtered?institutionId=${institutionId}+&site=${site}`;
-    Asset[] asset = check backend->get(path);
+    string encodedInstitutionId = check url:encode(institutionId, "UTF-8");
+    string encodedSite = check url:encode(site, "UTF-8");
+    string path = string `/assets/filtered?institutionId=${encodedInstitutionId}&site=${encodedSite}`;
+    Asset[]|error result = check backend->get(path);
 
-    foreach Asset a in asset {
+    if result is error {
+        io:println("No assets found for the filter.");
+        return;
+    }
+
+    foreach Asset a in result {
         printAsset(a);
     }
 }
@@ -145,8 +153,8 @@ function overdueDashboard(http:Client backend) returns error? {
     Asset[]|error result = backend->get("/assets/overdue");
 
     if result is error {
-        io:println("Error occurred while fetching overdue assets.");
-        return result;
+        io:println("No overdue assets.");
+        return;
     }
 
     Asset[] asset = check backend->get("/assets/overdue");
@@ -158,6 +166,7 @@ function overdueDashboard(http:Client backend) returns error? {
 function loanAndReturn(http:Client backend) returns error? {
     io:println("1. Loan Asset");
     io:println("2. Return Asset");
+    io:println("0. Back to Main Menu");
     string choice = io:readln();
 
     match choice {
@@ -173,6 +182,9 @@ function loanAndReturn(http:Client backend) returns error? {
             io:println("Enter Schedule ID of the loan to be returned: ");
             string scheduleId = io:readln();
             check returnAsset(backend, assetTag, scheduleId);
+        }
+        "0" => {
+            io:println("Returning to main menu.");
         }
         _ => {
             io:println("Invalid choice");
@@ -224,6 +236,7 @@ function returnAsset(http:Client backend, string assetTag, string scheduleId) re
 function scheduleManager(http:Client backend) returns error? {
     io:println("1. Create Schedule");
     io:println("2. Update Schedule");
+    io:println("0. Back to Main Menu");
     string choice = io:readln();
 
     match choice {
@@ -239,6 +252,9 @@ function scheduleManager(http:Client backend) returns error? {
         //     string scheduleId = io:readln();
         //     check updateSchedule(backend, assetTag, scheduleId);
         // }
+        "0" => {
+            io:println("Returning to main menu.");
+        }
         _ => {
             io:println("Invalid choice");
             }
