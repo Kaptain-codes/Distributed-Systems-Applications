@@ -1,7 +1,7 @@
 import ballerina/http;
 import ballerina/task;
 
-listener http:Listener httpListener = check new (9090);
+listener http:Listener httpListener = check new (9091);
 
 service /assets on httpListener {
 
