@@ -1,0 +1,435 @@
+# NOTE: the top-level `version:` key is deprecated in current Compose —
+# safe to delete if you want to silence the startup warning. Left out here.
+
+networks:
+  backbone:
+    driver: bridge
+
+services:
+
+  # ---------------------------------------------------------------
+  # Kafka event bus (Zookeeper mode)
+  # ---------------------------------------------------------------
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    profiles: ["order-customer", "restaurant-payment", "delivery", "notification-admin", "all"]
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    healthcheck:
+      # TCP-only check. The `ruok` 4-letter-word command never worked on
+      # this image despite ZOOKEEPER_4LW_COMMANDS_WHITELIST being set
+      # correctly on the container — confirmed via
+      # `docker exec ... cat /etc/kafka/zookeeper.properties` showing the
+      # whitelist line was never written to the generated properties file.
+      # This just confirms the client port is open, which logs confirmed
+      # is a reliable proxy for zookeeper being ready.
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/2181'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks: [backbone]
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    profiles: ["order-customer", "restaurant-payment", "delivery", "notification-admin", "all"]
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    healthcheck:
+      # timeout bumped 5s -> 15s: kafka-topics is a JVM CLI with its own
+      # startup overhead, and 5s wasn't reliably enough once 20+ containers
+      # were competing for CPU/memory at once (confirmed via
+      # `docker inspect ... .State.Health` showing "exceeded timeout (5s)"
+      # on every failed attempt even though a manual run succeeded instantly).
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 15s
+      retries: 15
+      start_period: 30s
+    networks: [backbone]
+
+  # ---------------------------------------------------------------
+  # Creates required Kafka topics once the broker is healthy.
+  # PLACEHOLDER topic list in kafka/create-topics.sh — replace with
+  # your real topics.
+  # ---------------------------------------------------------------
+  kafka-init:
+    image: confluentinc/cp-kafka:7.6.0
+    profiles: ["order-customer", "restaurant-payment", "delivery", "notification-admin", "all"]
+    restart: "no"
+    depends_on:
+      kafka:
+        condition: service_healthy
+    volumes:
+      - ./kafka/create-topics.sh:/opt/app/create-topics.sh:ro
+    command: ["/bin/bash", "/opt/app/create-topics.sh"]
+    networks: [backbone]
+
+  # ---------------------------------------------------------------
+  # API gateway
+  # KNOWN BUG (not yet fixed in gateway.bal): downstream client calls use
+  # /order_service, /user_service, /notification_service, /payment_service,
+  # /admin_service, /delivery_service, /restaurant_service — but every real
+  # service is mounted at the short name instead (/order, /customer,
+  # /notification, /payment, /admin, /delivery, /restaurant). Every proxied
+  # gateway route will 404 until gateway.bal's client paths are corrected.
+  # ---------------------------------------------------------------
+  gateway:
+    build: ../../gateway
+    profiles: ["order-customer", "restaurant-payment", "delivery", "notification-admin", "all"]
+    depends_on:
+      order-service:
+        condition: service_healthy
+        required: false
+      customer-service:
+        condition: service_healthy
+        required: false
+      notification-service:
+        condition: service_healthy
+        required: false
+      admin-service:
+        condition: service_healthy
+        required: false
+      payment-service:
+        condition: service_healthy
+        required: false
+      restaurant-service:
+        condition: service_healthy
+        required: false
+      delivery-service:
+        condition: service_healthy
+        required: false
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks: [backbone]
+
+  # Wilgano
+  order-service:
+    build: ../../services/orderService
+    profiles: ["order-customer", "all"]
+    ports:
+      - "8081:9090"
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      order-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9090/order/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks: [backbone]
+
+  customer-service:
+    # NOTE: folder is services/customerService — NOT userService, despite
+    # some earlier scaffolding/naming referring to it as "user service".
+    build: ../../services/customerService
+    profiles: ["order-customer", "all"]
+    ports:
+      - "8082:9090"
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      customer-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9090/customer/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks: [backbone]
+
+  # Sholm
+  admin-service:
+    build: ../../services/adminService
+    profiles: ["notification-admin", "all"]
+    ports:
+      - "8085:9090"
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      admin-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9090/admin/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks: [backbone]
+
+  notification-service:
+    build: ../../services/notificationService
+    profiles: ["notification-admin", "all"]
+    ports:
+      - "8083:9090"
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      notification-db:
+        condition: service_healthy
+      notification-redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9090/notification/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks: [backbone]
+
+  notification-redis:
+    image: redis:7-alpine
+    profiles: ["notification-admin", "all"]
+    container_name: notification-redis
+    ports:
+      - "6381:6379"
+    volumes:
+      - notification-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks: [backbone]
+
+  # Emmanuel
+  payment-service:
+    build: ../../services/paymentService
+    profiles: ["restaurant-payment", "all"]
+    ports:
+      - "8084:9090"
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      payment-db:
+        condition: service_healthy
+      payment-redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9090/payment/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks: [backbone]
+
+  restaurant-service:
+    build: ../../services/restaurantService
+    profiles: ["restaurant-payment", "all"]
+    ports:
+      - "8087:9090"
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      restaurant-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9090/restaurant/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks: [backbone]
+
+  payment-redis:
+    image: redis:7-alpine
+    profiles: ["restaurant-payment", "all"]
+    container_name: payment-redis
+    ports:
+      - "6380:6379"
+    volumes:
+      - payment-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks: [backbone]
+
+  # Ikuaa
+  delivery-service:
+    build: ../../services/deliveryService
+    profiles: ["delivery", "all"]
+    ports:
+      - "8086:9090"
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      delivery-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9090/delivery/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks: [backbone]
+
+  # Wilgano
+  order-db:
+    image: mysql:8
+    profiles: ["order-customer", "all"]
+    environment:
+      MYSQL_ROOT_PASSWORD: ${ORDER_DB_PASSWORD:?Set ORDER_DB_PASSWORD in .env}
+    ports:
+      - "${ORDER_DB_PORT:-1434}:3306"
+    volumes:
+      - "order-db-data:/var/lib/mysql"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks: [backbone]
+
+  customer-db:
+    image: mongo:7
+    profiles: ["order-customer", "all"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:?Set MONGO_ROOT_USER in .env}
+      MONGO_INITDB_ROOT_PASSWORD: ${CUSTOMER_DB_PASSWORD:?Set CUSTOMER_DB_PASSWORD in .env}
+    ports:
+      - "${CUSTOMER_DB_PORT:-27017}:27017"
+    volumes:
+      - "customer-db-data:/data/db"
+    healthcheck:
+      # CMD-SHELL required, not exec-form CMD: exec form doesn't expand
+      # $$VARS at all (they get passed to mongosh as a literal string,
+      # auth fails every time) — this cost real debugging time before
+      # being caught via docker compose ps showing "unhealthy".
+      test: ["CMD-SHELL", "mongosh --quiet -u \"$$MONGO_INITDB_ROOT_USERNAME\" -p \"$$MONGO_INITDB_ROOT_PASSWORD\" --authenticationDatabase admin --eval \"db.adminCommand('ping')\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks: [backbone]
+
+  # Emmanuel
+  restaurant-db:
+    image: mysql:8
+    profiles: ["restaurant-payment", "all"]
+    environment:
+      MYSQL_ROOT_PASSWORD: ${RESTAURANT_DB_PASSWORD:?Set RESTAURANT_DB_PASSWORD in .env}
+    ports:
+      - "${RESTAURANT_DB_PORT:-1435}:3306"
+    volumes:
+      - "restaurant-db-data:/var/lib/mysql"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks: [backbone]
+
+  payment-db:
+    image: mysql:8
+    profiles: ["restaurant-payment", "all"]
+    environment:
+      MYSQL_ROOT_PASSWORD: ${PAYMENT_DB_PASSWORD:?Set PAYMENT_DB_PASSWORD in .env}
+    ports:
+      - "${PAYMENT_DB_PORT:-1436}:3306"
+    volumes:
+      - "payment-db-data:/var/lib/mysql"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks: [backbone]
+
+  # Ikuaa
+  delivery-db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    profiles: ["delivery", "all"]
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${DELIVERY_DB_PASSWORD:?Set DELIVERY_DB_PASSWORD in .env}
+    ports:
+      - "${DELIVERY_DB_PORT:-1437}:1433"
+    volumes:
+      - "delivery-db-data:/var/opt/mssql"
+    healthcheck:
+      # mssql-tools18 needs -C to trust the image's self-signed cert.
+      # If your image still ships the older mssql-tools, use
+      # /opt/mssql-tools/bin/sqlcmd instead and drop -C.
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 45s
+    networks: [backbone]
+
+  # Sholm
+  notification-db:
+    image: mongo:7
+    profiles: ["notification-admin", "all"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:?Set MONGO_ROOT_USER in .env}
+      MONGO_INITDB_ROOT_PASSWORD: ${NOTIFICATION_DB_PASSWORD:?Set NOTIFICATION_DB_PASSWORD in .env}
+    ports:
+      - "${NOTIFICATION_DB_PORT:-27018}:27017"
+    volumes:
+      - "notification-db-data:/data/db"
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet -u \"$$MONGO_INITDB_ROOT_USERNAME\" -p \"$$MONGO_INITDB_ROOT_PASSWORD\" --authenticationDatabase admin --eval \"db.adminCommand('ping')\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks: [backbone]
+
+  admin-db:
+    image: mongo:7
+    profiles: ["notification-admin", "all"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:?Set MONGO_ROOT_USER in .env}
+      MONGO_INITDB_ROOT_PASSWORD: ${ADMIN_DB_PASSWORD:?Set ADMIN_DB_PASSWORD in .env}
+    ports:
+      - "${ADMIN_DB_PORT:-27019}:27017"
+    volumes:
+      - "admin-db-data:/data/db"
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet -u \"$$MONGO_INITDB_ROOT_USERNAME\" -p \"$$MONGO_INITDB_ROOT_PASSWORD\" --authenticationDatabase admin --eval \"db.adminCommand('ping')\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks: [backbone]
+
+volumes:
+  order-db-data:
+  restaurant-db-data:
+  payment-db-data:
+  delivery-db-data:
+  customer-db-data:
+  notification-db-data:
+  admin-db-data:
+  payment-redis-data:
+  notification-redis-data:

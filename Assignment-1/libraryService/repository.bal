@@ -131,7 +131,7 @@ public isolated function updateAsset(string assetTag, AssetUpdate assetUpdate) r
             updatedAsset.institutionId = cleanInstId;
         }
         if updateCopy.site is string {
-            updatedAsset.site = normalizeId(<string>updateCopy.site);
+            updatedAsset.site = normalizeText(<string>updateCopy.site);
         }
         if updateCopy.dateAcquired is string {
             updatedAsset.dateAcquired = normalizeText(<string>updateCopy.dateAcquired);
@@ -207,7 +207,7 @@ public isolated function getAssetsBySite(string site) returns Asset[] & readonly
 
 public isolated function getAssetsByFilters(string? institutionId, string? site, AssetStatus? status) returns Asset[] & readonly {
     string? cleanInstitutionId = institutionId is string ? normalizeId(institutionId) : ();
-    string? cleanSite = site is string ? normalizeId(site) : ();
+    string? cleanSite = site is string ? normalizeText(site) : ();
     lock {
         Asset[] matches = [];
         foreach var asset in assetTable {
