@@ -1,0 +1,301 @@
+syntax = "proto3";
+
+package rental;
+
+// =====================================================
+// DSA612S Assignment 1 
+// Rental Accommodation System
+// gRPC Service Contract
+//
+// Author:    Sholm Van Wyk
+// Ballerina: 2201.13.4 (Swan Lake Update 13)
+// Ver: 1.0(PolishedDraft)
+
+// Changes
+//   - PropertyType enum replaces free-string propertyType
+//   - CreateUsersResponse gains failedCount + structured errors
+//   - SearchPropertyResponse aligned to success/message
+//   - PropertyList renamed RemovePropertyResponse
+//   - ListAvailableRequest renamed ListAvailablePropertiesRequest
+
+// ===
+// ENUMS
+// ===
+
+enum PropertyStatus {
+  PROPERTY_STATUS_UNSPECIFIED = 0;
+  AVAILABLE = 1;
+  UNAVAILABLE = 2;
+  MAINTENANCE = 3;
+}
+
+enum UserRole {
+  USER_ROLE_UNSPECIFIED = 0;
+  HOST = 1;
+  GUEST = 2;
+}
+
+// Accommodation categories. An enum rather than a free
+// string so invalid input is rejected at the contract
+// boundary instead of needing a whitelist in the server.
+
+enum PropertyType {
+  PROPERTY_TYPE_UNSPECIFIED = 0;
+  APARTMENT = 1;
+  HOUSE = 2;
+  COTTAGE = 3;
+  LODGE = 4;
+  GUEST_HOUSE = 5;
+  CAMPSITE = 6;
+}
+
+
+// ===
+// CORE ENTITIES
+// ===
+
+
+// hostId and region are additions: RemoveProperty must
+// return "that Host's region", which neither the brief's
+// field list nor a street address can support.
+
+message Property {
+  string propertyId = 1;          // server-generated
+  string hostId = 2;              // owner
+  string name = 3;
+  string location = 4;            // specific address
+  string region = 5;              // grouping, e.g. Khomas
+  PropertyType propertyType = 6;
+  double pricePerNight = 7;
+  PropertyStatus status = 8;
+}
+
+message User {
+  string userId = 1;
+  string name = 2;
+  string email = 3;
+  UserRole role = 4;
+}
+
+// A confirmed booking. Created by ConfirmBooking, never
+// by BookProperty. totalCost and nights are stored rather
+// than recomputed so the price is locked at confirmation.
+
+message Booking {
+  string bookingId = 1;
+  string propertyId = 2;
+  string guestId = 3;
+  string checkIn = 4;             // ISO YYYY-MM-DD
+  string checkOut = 5;            // ISO YYYY-MM-DD
+  double totalCost = 6;
+  int32 nights = 7;
+}
+
+
+// ===
+// 1. ADD PROPERTY 
+// Host registers a listing. Server returns the ID.
+// ===
+
+// Assigns Property ID
+
+message AddPropertyRequest {
+  string hostId = 1;
+  string name = 2;
+  string location = 3;
+  string region = 4;
+  PropertyType propertyType = 5;
+  double pricePerNight = 6;
+  PropertyStatus status = 7;
+}
+
+message AddPropertyResponse {
+  bool success = 1;
+  string message = 2;
+  string propertyId = 3;
+}
+
+
+// ===
+// 2. CREATE USERS 
+// Client streams User messages; server replies once,
+// after the stream closes.
+// ===
+
+
+// Example of a failed entry
+
+message UserCreationError {
+  string userId = 1;              // as submitted; may be empty
+  string reason = 2;              // e.g. "duplicate userId"
+}
+
+// success is true only when failedCount == 0.
+// Structured errors rather than prose in `message`, so
+// the client can act on failures per-user.
+
+message CreateUsersResponse {
+  bool success = 1;
+  string message = 2;
+  int32 createdCount = 3;
+  repeated string createdUserIds = 4;
+  int32 failedCount = 5;
+  repeated UserCreationError errors = 6;
+}
+
+
+// ===
+// 3. UPDATE PROPERTY 
+// Host edits a listing, keyed on propertyId.
+// ===
+
+// `optional` restores field presence: without it, proto3
+// cannot tell "price omitted" from "price set to 0.0",
+// so partial updates would be impossible.
+
+message UpdatePropertyRequest {
+  string propertyId = 1;
+  string hostId = 2;              
+  optional string name = 3;
+  optional string location = 4;
+  optional double pricePerNight = 5;
+  optional PropertyStatus status = 6;
+  optional PropertyType propertyType = 7;
+}
+
+message UpdatePropertyResponse {
+  bool success = 1;
+  string message = 2;
+  Property property = 3;          
+}
+
+
+// ===
+// 4. REMOVE PROPERTY  
+// Host deletes a listing. Server returns the remaining
+// available properties in that Host's region.
+// ===
+
+message RemovePropertyRequest {
+  string propertyId = 1;
+  string hostId = 2;
+}
+
+// Returns a list
+
+message RemovePropertyResponse {
+  bool success = 1;
+  string message = 2;
+  string region = 3;
+  repeated Property properties = 4;
+  int32 count = 5;
+}
+
+
+// ===
+// 5. LIST AVAILABLE PROPERTIES 
+// Guest browses. Server streams matching properties one
+// by one, optionally filtered by location or price.
+// ===
+
+// All filters optional: an omitted minPrice must be
+// distinguishable from a deliberate 0.0
+
+message ListAvailablePropertiesRequest {
+  optional string location = 1;
+  optional double minPrice = 2;
+  optional double maxPrice = 3;
+}
+
+
+// ===
+// 6. SEARCH PROPERTY
+// Guest looks up one property by ID.
+// ===
+
+message SearchPropertyRequest {
+  string propertyId = 1;
+}
+
+// "Not Available" is returned in `message` with
+// success = false, per the brief. Same success/message
+// convention as every other unary response.
+
+message SearchPropertyResponse {
+  bool success = 1;
+  string message = 2;
+  optional Property property = 3; // absent when not found
+}
+
+
+// ===
+// 7. BOOK PROPERTY 
+// Guest requests dates. Server validates
+// ===
+
+message BookPropertyRequest {
+  string guestId = 1;
+  string propertyId = 2;
+  string checkIn = 3;             // YYYY-MM-DD
+  string checkOut = 4;            // YYYY-MM-DD
+}
+
+// cartItemId is an addition: ConfirmBooking has no other
+// way to identify which pending request to finalise.
+// estimatedCost, not totalCost - availability has not
+// been re-verified at this point. Deliberately different
+// names for deliberately different guarantees.
+
+message BookPropertyResponse {
+  bool success = 1;
+  string message = 2;
+  string cartItemId = 3;
+  int32 nights = 4;
+  double estimatedCost = 5;
+}
+
+
+// ===
+// 8. CONFIRM BOOKING
+// Finalises. Server re-checks date overlaps, computes
+// the final cost, and clears the Guest's cart entry.
+// ===
+
+message ConfirmBookingRequest {
+  string guestId = 1;
+  string cartItemId = 2;
+}
+
+message ConfirmBookingResponse {
+  bool success = 1;
+  string message = 2;
+  optional Booking booking = 3;   // present on success
+}
+
+
+// ===
+// SERVICE
+// 8 RPCs: 6 unary, 1 client-streaming, 1 server-streaming
+// ===
+
+service RentalService {
+
+  // Host operations
+  rpc AddProperty(AddPropertyRequest) returns (AddPropertyResponse);
+  rpc UpdateProperty(UpdatePropertyRequest) returns (UpdatePropertyResponse);
+  rpc RemoveProperty(RemovePropertyRequest) returns (RemovePropertyResponse);
+
+  // User management
+  rpc CreateUsers(stream User) returns (CreateUsersResponse);
+
+  // Guest browsing
+  rpc ListAvailableProperties(ListAvailablePropertiesRequest) returns (stream Property);
+  rpc SearchProperty(SearchPropertyRequest) returns (SearchPropertyResponse);
+
+  // Booking flow
+  rpc BookProperty(BookPropertyRequest) returns (BookPropertyResponse);
+  rpc ConfirmBooking(ConfirmBookingRequest) returns (ConfirmBookingResponse);
+}
+
+
+// Open for new questions, kindly state all missing attributes.
