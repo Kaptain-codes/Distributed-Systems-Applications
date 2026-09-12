@@ -3,7 +3,7 @@ import ballerina/test;
 // The generated RentalServiceClient lives in rental_pb.bal, in this
 // same package - so the server can be tested without waiting for
 // Person 4's client.
-RentalServiceClient cl = check new ("http://localhost:9091");
+RentalServiceClient cl = check new ("http://localhost:9092");
 
 // Shared across tests. Ballerina runs tests in declaration order
 // within a file unless dependsOn says otherwise.

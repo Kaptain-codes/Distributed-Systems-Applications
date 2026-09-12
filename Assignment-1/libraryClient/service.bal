@@ -95,7 +95,7 @@ type Asset record {|
 |};
 
 public function main() returns error? {
-    http:Client backend = check new ("http://localhost:9091");
+    http:Client backend = check new ("http://localhost:9090");
     boolean running = true;
 
     // Main menu loop: keeps showing options until the user picks "0" (Exit).
