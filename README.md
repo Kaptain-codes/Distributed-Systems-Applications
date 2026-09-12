@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Assignment 1 — Asset, Institution and Rental Services
 
 This document describes the implemented Assignment 1 architecture. Evidence is in the Ballerina source, generated gRPC bindings and protobuf contract in this directory.
@@ -122,3 +123,7 @@ The repository includes service tests under [libraryService/tests](libraryServic
 - Generated gRPC code must remain consistent with [rental.proto](rental.proto).
 - The HTTP service and gRPC service both use port `9090`, but they are separate processes/listeners and cannot share the same host port when run simultaneously without a port change.
 - The repository’s generic test template references `/greeting`, which is not an implemented Assignment 1 route; inspect [service_test.bal](libraryService/tests/service_test.bal#L15-L26) before relying on it.
+=======
+# Distributed-Systems-Applications
+Collection of the DSA621s assisgnments
+>>>>>>> d6102c9 (Initial commit)
