@@ -17,16 +17,26 @@ string testCartItemId = "";
 
 @test:Config {}
 function testNormalizeId() {
+<<<<<<< HEAD
     test:assertEquals(normalizeId("  prop-001  "), "PROP-001");
+=======
+    test:assertEquals(normalizeId("  PROP-001  "), "prop-001");
+>>>>>>> 2f44e7551db2b8dcc7b2b106af098b2f127b9876
     test:assertEquals(normalizeId("host-1"), "HOST-1");
 }
 
 @test:Config {}
 function testNightsBetween() returns error? {
     // 10th to 15th is 5 nights, 6 days. Checkout day is not a night.
+<<<<<<< HEAD
     test:assertEquals(check nightsBetween("2026-09-10", "2026-09-15"), 5);
     test:assertEquals(check nightsBetween("2026-09-10", "2026-09-11"), 1);
     test:assertEquals(check nightsBetween("2026-12-30", "2027-01-02"), 3);
+=======
+    test:assertEquals(nightsBetween("2026-09-10", "2026-09-15"), 5);
+    test:assertEquals(nightsBetween("2026-09-10", "2026-09-11"), 1);
+    test:assertEquals(nightsBetween("2026-12-30", "2027-01-02"), 3);
+>>>>>>> 2f44e7551db2b8dcc7b2b106af098b2f127b9876
 }
 
 @test:Config {}
