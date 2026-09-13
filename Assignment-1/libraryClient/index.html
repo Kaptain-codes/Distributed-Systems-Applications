@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Library &amp; Resource Management - Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <header>
+        <h1>Library &amp; Resource Management</h1>
+        <p>Ministry-wide asset dashboard - talk directly to your REST backend.</p>
+        <div class="conn-row">
+            <input id="baseUrl" type="text" value="http://localhost:9091" placeholder="Backend base URL">
+            <button id="refreshBtn">Connect &amp; refresh</button>
+        </div>
+    </header>
+
+<!-- ============================================================
+     NAVIGATION
+     - Each .tab has a data-tab="xyz" attribute.
+     - JS reads that attribute and shows the matching #panel-xyz.
+     ============================================================ -->
+    <div class="layout">
+        <!-- SIDEBAR NAVIGATION-->
+        <aside class="sidebar">
+            <div class="tab active" data-tab="global">Global view</div>
+            <div class="tab" data-tab="campus">Campus view</div>
+            <div class="tab" data-tab="overdue">Overdue dashboard</div>
+            <div class="tab" data-tab="loan">Loan / Booking</div>
+            <div class="tab" data-tab="schedule">Schedule manager</div>
+        </aside>
+
+        <!-- MAIN CONTENT -->
+        <section class="content">
+            <!-- STAT CARD -->
+            <div class="stat-grid">
+                <article class="stat-card">
+                    <span>Total</span>
+                    <strong id="total-assets">0</strong>
+                </article>
+                <article class="stat-card">
+                    <span>Available</span>
+                    <strong id="available-assets">0</strong>
+                </article>
+                <article class="stat-card">
+                    <span>Overdue</span>
+                    <strong id="overdue-assets">0</strong>
+                </article>
+                <article class="stat-card">
+                    <span>Institutions</span>
+                    <strong id="institution-count">0</strong>
+                </article>
+            </div>
+
+            <!--=======PANEL 1. GLOBAL VIEW=======-->
+            <section class="panel active" id="panel-global">
+                <h2>All assets</h2>
+                <p class="sub">Every resource across every institution and campus</p>
+                <div id="global-list" class="card-list">
+                    <p class="empty">Click "Connect &amp; refresh" to load assets.</p>
+                </div>
+            </section>
+
+            <!--=======PANEL 2. CAMPUS VIEW=======-->
+            <section class="panel" id="panel-campus">
+                <h2>Filter by institution / site</h2>
+                <p class="sub">Narrow the list to one campus or institution</p>
+                <div class="filters">
+                    <input id="campus-institution" placeholder="Institution ID (e.g NUST)">
+                    <input id="campus-site" placeholder="Site (e.g Main Campus) - optional">
+                    <button id="campus-filter-btn">Filter</button>
+                </div>
+                <div id="campus-list" class="card-list">
+                    <p class="empty">Enter an institution and filter.</p>
+                </div>
+            </section>
+
+            <!--=======PANEL 3. OVERDUE DASHBOARD=======-->
+            <section class="panel" id="panel-overdue">
+                <h2>Overdue items</h2>
+                <p class="sub">Assets past their schedule due date.</p>
+                <div id="overdue-list" class="card-list">
+                    <p class="empty">Click "Connect &amp; refresh" to check.</p>
+                </div>
+            </section>
+
+            <!--=======PANEL 4. LOAN/ RETURN=======-->
+            <section class="panel" id="panel-loan">
+                <h2>Loan / Return an asset</h2>
+                <p class="sub">Loan an available asset, or return one that's currently on loan.</p>
+
+                <div class="two-col">
+                    <!-- Loan form -->
+                    <form id="loan-form" class="stack">
+                        <h3>Loan an asset</h3>
+                        <label>Asset tag
+                            <input id="loan-tag" required placeholder="e.g NUST-LIB-3DP-001">
+                        </label>
+                        <label>Due date
+                            <input id="loan-due" type="date" required>
+                        </label>
+                        <button type="submit">Loan asset</button>
+                        <div id="loan-msg" class="status-msg"></div>
+                    </form>
+
+                    <!-- Return form -->
+
+                    <form id="return-form" class="stack">
+                        <h3>Return an asset</h3>
+                        <label>Asset tag
+                            <input id="return-tag" required placeholder="e.g. NUST-LIB-3DP-001">
+                        </label>
+                        <label>Schedule ID of the loan
+                            <input id="return-schedule" required placeholder="e.g. SCH-...">
+                        </label>
+                        <button type="submit">Return asset</button>
+                        <div id="return-msg" class="status-msg"></div>
+                    </form>
+                </div>
+            </section>
+
+            <!--=======PANEL 5. SCHEDULE MANAGER=======-->
+            <section class="panel" id="panel-schedule">
+                <h2>Add a servicing schedule</h2>
+                <p class="sub">Creates a new schedule entry on an asset.</p>
+                <form id="schedule-form" class="stack">
+                    <label>Asset tag
+                        <input id="sched-tag" required placeholder="e.g. NUST-LIB-3DP-001">
+                    </label>
+                    <label>Type
+                        <select id="sched-type">
+                            <option value="MAINTENANCE">MAINTENANCE</option>
+                            <option value="ROUTINE_SERVICE">ROUTINE_SERVICE</option>
+                            <option value="BOOKING">BOOKING</option>
+                        </select>
+                    </label>
+                    <label>Start time
+                        <input id="sched-start" type="datetime-local" required>
+                    </label>
+                    <label>Due date
+                        <input id="sched-due" type="datetime-local" required>
+                    </label>
+                    <label>Description
+                        <textarea id="sched-desc" rows="3" placeholder="e.g. Quarterly calibration"></textarea>
+                    </label>
+                    <button type="submit">Add schedule</button>
+                    <div id="sched-msg" class="status-msg"></div>
+                </form>
+            </section>
+
+        </section>
+    </div>
+    
+    <!--The script tag is at the bottom so the DOM is fully built
+     before the JS runs and tries to query for elements. -->
+     <script src="app.js"></script>
+
+</body>
+</html>
