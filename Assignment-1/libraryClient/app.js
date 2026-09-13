@@ -28,16 +28,32 @@ function escapeHtml(text) {
 }
 
 async function request(path, options = {}) {
+    // Start with any headers the caller passed in.
+    const headers = { ...(options.headers || {}) };
+
+    // Only send Content-Type when there's a body (POST, PUT, PATCH).
+    // GET requests have no body, and sending Content-Type anyway
+    // makes the browser run a CORS preflight that we don't need.
+    if (options.body) {
+        headers['Content-Type'] = 'application/json';
+    }
+
+    // Always accept JSON back.
+    headers['Accept'] = 'application/json';
+
     const response = await fetch(baseUrl() + path, {
-        headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
-        ...options
+        ...options,
+        headers
     });
+
     const text = await response.text();
     let payload;
     try { payload = text ? JSON.parse(text) : null; } catch { payload = text; }
 
     if (!response.ok) {
-        const msg = typeof payload === 'string' ? payload : (payload?.message || JSON.stringify(payload));
+        const msg = typeof payload === 'string'
+            ? payload
+            : (payload?.message || JSON.stringify(payload));
         throw new Error(msg || `HTTP ${response.status}`);
     }
     return payload;
