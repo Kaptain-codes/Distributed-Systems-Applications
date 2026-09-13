@@ -5,7 +5,7 @@
 
 [ballerina]
 dependencies-toml-version = "2"
-distribution-version = "2201.13.5"
+distribution-version = "2201.13.4"
 
 [[package]]
 org = "ballerina"
@@ -59,7 +59,7 @@ dependencies = [
 [[package]]
 org = "ballerina"
 name = "file"
-version = "1.13.0"
+version = "1.13.1"
 dependencies = [
 	{org = "ballerina", name = "io"},
 	{org = "ballerina", name = "jballerina.java"},
@@ -70,7 +70,7 @@ dependencies = [
 [[package]]
 org = "ballerina"
 name = "http"
-version = "2.16.7"
+version = "2.17.1"
 dependencies = [
 	{org = "ballerina", name = "auth"},
 	{org = "ballerina", name = "cache"},
@@ -314,7 +314,7 @@ modules = [
 ]
 
 [[package]]
-org = "blazer"
+org = "wykva"
 name = "libraryClient"
 version = "0.1.0"
 dependencies = [
@@ -325,6 +325,6 @@ dependencies = [
 	{org = "ballerinai", name = "observe"}
 ]
 modules = [
-	{org = "blazer", packageName = "libraryClient", moduleName = "libraryClient"}
+	{org = "wykva", packageName = "libraryClient", moduleName = "libraryClient"}
 ]
 
