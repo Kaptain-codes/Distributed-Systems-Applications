@@ -91,18 +91,16 @@ service /assets on httpListener {
         
     }
 
-    isolated resource function get filtered(string? institutionId = (), string? site = (), AssetStatus? status = ())
-    returns http:Ok|http:NotFound|http:BadRequest {
-
-    if institutionId is () && site is () && status is () {
-        return <http:BadRequest>{
-            body: "At least one filter parameter (institutionId, site, or status) must be provided."
-        };
+    isolated resource function get filtered/[string institutionId]/[string site]() returns http:Ok|http:NotFound|http:BadRequest {
+        
+        Asset[] result = getAssetsByFilters(institutionId, site);
+        if result.length() == 0 {
+            return <http:NotFound> {
+                body: result
+            };
+        }
+        return <http:Ok>{body: result};
     }
-
-    Asset[] result = getAssetsByFilters(institutionId, site, status);
-    return <http:Ok>{body: result};
-}
 
 
     // SUB-RESOURCE MANAGEMENT
@@ -162,6 +160,21 @@ service /assets on httpListener {
         }
 
         return <http:Ok>{body: result};  
+    }
+    isolated resource function put [string assetTag]/schedules/[string scheduleId](@http:Payload ScheduleUpdate scheduleUpdate) returns http:Ok|http:InternalServerError|http:UnprocessableEntity|http:NotFound {
+        Asset|error result = updateSchedule(assetTag, scheduleId, scheduleUpdate);
+        if result is AssetNotFound {
+            return <http:NotFound>{body: string `Error updating schedule: ${result.message()}`};
+        } else if result is ScheduleNotFound {
+            return <http:NotFound>{body: string `Error updating schedule: ${result.message()}`};
+        } else if result is AssetDisposed || result is InvalidAssetState {
+            return <http:UnprocessableEntity>{body: string `Error updating schedule: ${result.message()}`};
+        }
+        if result is error {
+            return <http:InternalServerError>{body: {message: result.message()}};
+        }
+
+        return <http:Ok>{body: result};
     }
     isolated resource function post [string assetTag]/workorders(@http:Payload WorkOrder workOrder) returns http:Ok|http:InternalServerError|http:UnprocessableEntity|http:NotFound|http:Conflict {
         Asset|error result = addWorkOrder(assetTag, workOrder);

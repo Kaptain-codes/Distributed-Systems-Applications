@@ -1,6 +1,6 @@
 import ballerina/io;
 
-RentalServiceClient ep = check new ("http://localhost:9091");
+RentalServiceClient ep = check new ("http://localhost:9092");
 
 const string HOST_ID = "HOST-001";
 const string GUEST_ID = "GUEST-001";

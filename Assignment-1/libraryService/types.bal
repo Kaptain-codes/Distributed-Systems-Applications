@@ -110,3 +110,11 @@ public type WorkOrderUpdate record {|   // ✅ closed record
     time:Utc? completedAt = ();
     Task[]? tasks = ();
 |} & readonly;
+
+public type ScheduleUpdate record {|
+    ScheduleType? scheduleType = ();
+    ScheduleStatus? scheduleStatus = ();
+    time:Utc? startTime = ();
+    time:Utc? dueDate = ();
+    string? description = ();
+|} & readonly;

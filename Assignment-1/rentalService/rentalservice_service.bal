@@ -1,6 +1,6 @@
 import ballerina/grpc;
 
-listener grpc:Listener ep = new (9091);
+listener grpc:Listener ep = new (9092);
 
 @grpc:Descriptor {value: RENTAL_DESC}
 service "RentalService" on ep {

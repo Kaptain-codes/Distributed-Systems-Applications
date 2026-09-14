@@ -15,7 +15,7 @@ service class OverdueSchedulerJob {
 
                 // Scan through every schedule inside this asset
                 foreach var schedule in asset.schedules {
-                    if (schedule.scheduleStatus == ACTIVE || schedule.scheduleStatus == PENDING) && 
+                    if (schedule.scheduleStatus == ACTIVE || schedule.scheduleStatus == PENDING) &&
                        schedule.dueDate < currentTime {
                         
                         schedule.scheduleStatus = OVERDUE; // Mutate the state block

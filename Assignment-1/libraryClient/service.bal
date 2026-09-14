@@ -339,12 +339,10 @@ function returnAsset(http:Client backend, string assetTag, string scheduleId) re
 }
 
 // FEATURE 5: SCHEDULE MANAGER
-// Lets the user add a new maintenance/service schedule to an asset.
-// "Update Schedule" is disabled since the backend has no update endpoint
-// for schedules yet.
+// Lets the user add or partially update a maintenance/service schedule.
 function scheduleManager(http:Client backend) returns error? {
     io:println("1. Create Schedule");
-    io:println("2. Update Schedule (Currently Disabled)");
+    io:println("2. Update Schedule");
     io:println("0. Back to Main Menu");
     string choice = io:readln();
 
@@ -354,15 +352,13 @@ function scheduleManager(http:Client backend) returns error? {
             string assetTag = io:readln();
             check createSchedule(backend, assetTag);
         }
-        // Disabled: no PUT /assets/{tag}/schedules/{scheduleId} endpoint
-        // exists on the backend yet. Re-enable once that's added.
-        // "2" => {
-        //     io:println("Enter Asset Tag: ");
-        //     string assetTag = io:readln();
-        //     io:println("Enter Schedule ID: ");
-        //     string scheduleId = io:readln();
-        //     check updateSchedule(backend, assetTag, scheduleId);
-        // }
+        "2" => {
+            io:println("Enter Asset Tag: ");
+            string assetTag = io:readln();
+            io:println("Enter Schedule ID: ");
+            string scheduleId = io:readln();
+            check updateSchedule(backend, assetTag, scheduleId);
+        }
         "0" => {
             io:println("Returning to main menu.");
         }
@@ -424,40 +420,66 @@ function createSchedule(http:Client backend, string assetTag) returns error? {
     check handleResponse(response, "Schedule created successfully.");
 }
 
-// Disabled — see scheduleManager() above. Kept here so the logic isn't lost
-// if a PUT endpoint for updating schedules gets added to the backend later.
+type ScheduleUpdate record {|
+    ScheduleType? scheduleType = ();
+    ScheduleStatus? scheduleStatus = ();
+    time:Utc? startTime = ();
+    time:Utc? dueDate = ();
+    string? description = ();
+|};
 
-// function updateSchedule(http:Client backend, string assetTag, string scheduleId) returns error? {
-//     io:println("Enter Schedule Status (PENDING, ACTIVE, COMPLETED, CANCELLED, OVERDUE): ");
-//     string scheduleStatusInput = io:readln();
+function updateSchedule(http:Client backend, string assetTag, string scheduleId) returns error? {
+    io:println("Enter Schedule Type (blank to skip): ");
+    string scheduleTypeInput = io:readln();
+    io:println("Enter Schedule Status (blank to skip): ");
+    string scheduleStatusInput = io:readln();
+    io:println("Enter Start Time (YYYY-MM-DD, blank to skip): ");
+    string startTimeInput = io:readln();
+    io:println("Enter Due Date (YYYY-MM-DD, blank to skip): ");
+    string dueDateInput = io:readln();
+    io:println("Enter Description (blank to skip): ");
+    string descriptionInput = io:readln();
 
-//     ScheduleStatus scheduleStatus;
-//     match scheduleStatusInput {
-//         PENDING => {scheduleStatus = PENDING;}
-//         ACTIVE => {scheduleStatus = ACTIVE;}
-//         COMPLETED => {scheduleStatus = COMPLETED;}
-//         CANCELLED => {scheduleStatus = CANCELLED;}
-//         OVERDUE => {scheduleStatus = OVERDUE;}
-//         _ => {
-//             io:println("Invalid schedule status"); 
-//             return;
-//         }
-//     }
+    ScheduleUpdate update = {};
+    if scheduleTypeInput != "" {
+        match scheduleTypeInput {
+            "ROUTINE_SERVICE" => {update.scheduleType = ROUTINE_SERVICE;}
+            "MAINTENANCE" => {update.scheduleType = MAINTENANCE;}
+            "BOOKING" => {update.scheduleType = BOOKING;}
+            _ => {
+                io:println("Invalid schedule type");
+                return;
+            }
+        }
+    }
+    if scheduleStatusInput != "" {
+        match scheduleStatusInput {
+            "PENDING" => {update.scheduleStatus = PENDING;}
+            "ACTIVE" => {update.scheduleStatus = ACTIVE;}
+            "COMPLETED" => {update.scheduleStatus = COMPLETED;}
+            "CANCELLED" => {update.scheduleStatus = CANCELLED;}
+            "OVERDUE" => {update.scheduleStatus = OVERDUE;}
+            _ => {
+                io:println("Invalid schedule status");
+                return;
+            }
+        }
+    }
+    if startTimeInput != "" {
+        update.startTime = check time:utcFromString(startTimeInput + "T00:00:00Z");
+    }
+    if dueDateInput != "" {
+        update.dueDate = check time:utcFromString(dueDateInput + "T00:00:00Z");
+    }
+    if descriptionInput != "" {
+        update.description = descriptionInput;
+    }
 
-//     Schedule updatedSchedule = {
-//         scheduleId: scheduleId,
-//         scheduleType: BOOKING,
-//         scheduleStatus: scheduleStatus,
-//         startTime: time:utcNow(),
-//         dueDate: time:utcNow(),
-//         description: "Updated schedule"
-//     };
-
-//     http:Response|error response = backend->put(string `/assets/${assetTag}/schedules/${scheduleId}`, updatedSchedule);
-
-//     if response is error {
-//         io:println("Error occurred while updating the schedule: ", response.message());
-//         return;
-//     }
-//     io:println("Schedule updated successfully.");
-// }
+    http:Response|error response = backend->put(
+        string `/assets/${assetTag}/schedules/${scheduleId}`, update);
+    if response is error {
+        io:println("Error occurred while updating the schedule: ", response.message());
+        return;
+    }
+    check handleResponse(response, "Schedule updated successfully.");
+}

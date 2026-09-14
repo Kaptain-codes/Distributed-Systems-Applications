@@ -205,7 +205,7 @@ public isolated function getAssetsBySite(string site) returns Asset[] & readonly
     }
 }
 
-public isolated function getAssetsByFilters(string? institutionId, string? site, AssetStatus? status) returns Asset[] & readonly {
+public isolated function getAssetsByFilters(string? institutionId, string? site) returns Asset[] & readonly {
     string? cleanInstitutionId = institutionId is string ? normalizeId(institutionId) : ();
     string? cleanSite = site is string ? normalizeText(site) : ();
     lock {
@@ -213,8 +213,7 @@ public isolated function getAssetsByFilters(string? institutionId, string? site,
         foreach var asset in assetTable {
             boolean institutionMatches = cleanInstitutionId is () || asset.institutionId == cleanInstitutionId;
             boolean siteMatches = cleanSite is () || asset.site == cleanSite;
-            boolean statusMatches = status is () || asset.status == status;
-            if institutionMatches && siteMatches && statusMatches {
+            if institutionMatches && siteMatches{
                 matches.push(asset.cloneReadOnly());
             }
         }
@@ -265,8 +264,9 @@ public isolated function findOverdueAssets() returns Asset[] & readonly {
         Asset[] matches = [];
         foreach var asset in assetTable {
             foreach var schedule in asset.schedules {
-                if (schedule.scheduleStatus == ACTIVE || schedule.scheduleStatus == PENDING) &&
-                    schedule.dueDate < currentTime {
+                if schedule.dueDate < currentTime &&
+                    schedule.scheduleStatus != COMPLETED &&
+                    schedule.scheduleStatus != CANCELLED {
                     matches.push(asset.cloneReadOnly());
                     break;
                 }
@@ -319,6 +319,91 @@ public isolated function addSchedule(string assetTag, Schedule schedule) returns
         }
         existingAsset.schedules.push(scheduleCopy);
         
+
+        assetTable.put(existingAsset);
+        return existingAsset.cloneReadOnly();
+    }
+}
+
+public isolated function updateSchedule(string assetTag, string scheduleId, ScheduleUpdate scheduleUpdate) returns Asset|error {
+    string cleanTag = normalizeId(assetTag);
+    string cleanScheduleId = normalizeId(scheduleId);
+    ScheduleUpdate updateCopy = scheduleUpdate.clone();
+
+    lock {
+        Asset? existingAsset = assetTable[cleanTag];
+        if (existingAsset is ()) {
+            return error AssetNotFound("",
+                id = cleanTag,
+                reason = string `Asset tag not found`);
+        }
+        if existingAsset.status == DISPOSED {
+            return error AssetDisposed("Asset is permanently DISPOSED",
+                id = cleanTag,
+                reason = string `Transaction Rejected: Cannot update schedule.`);
+        }
+
+        Schedule? targetSchedule = ();
+        foreach var schedule in existingAsset.schedules {
+            if schedule.scheduleId == cleanScheduleId {
+                targetSchedule = schedule;
+                break;
+            }
+        }
+        if targetSchedule is () {
+            return error ScheduleNotFound("",
+                id = cleanScheduleId,
+                reason = string `Schedule ID not found for asset '${cleanTag}'.`);
+        }
+
+        Schedule schedule = targetSchedule.clone();
+        if updateCopy.scheduleType is ScheduleType {
+            schedule.scheduleType = <ScheduleType>updateCopy.scheduleType;
+        }
+        if updateCopy.scheduleStatus is ScheduleStatus {
+            schedule.scheduleStatus = <ScheduleStatus>updateCopy.scheduleStatus;
+        }
+        if updateCopy.startTime is time:Utc {
+            schedule.startTime = <time:Utc>updateCopy.startTime;
+        }
+        if updateCopy.dueDate is time:Utc {
+            schedule.dueDate = <time:Utc>updateCopy.dueDate;
+        }
+        if updateCopy.description is string {
+            schedule.description = normalizeText(<string>updateCopy.description);
+        }
+
+        if schedule.dueDate < schedule.startTime || schedule.dueDate == schedule.startTime {
+            return error InvalidAssetState("Invalid schedule dates",
+                id = cleanScheduleId,
+                reason = "Transaction Rejected: dueDate must be after startTime.");
+        }
+
+        foreach var [index, existingSchedule] in existingAsset.schedules.enumerate() {
+            if existingSchedule.scheduleId == cleanScheduleId {
+                existingAsset.schedules[index] = schedule;
+                break;
+            }
+        }
+
+        if schedule.scheduleType == BOOKING &&
+            (schedule.scheduleStatus == COMPLETED || schedule.scheduleStatus == CANCELLED) &&
+            existingAsset.status == OCCUPIED {
+            boolean activeBooking = false;
+            foreach var remainingSchedule in existingAsset.schedules {
+                if remainingSchedule.scheduleId != cleanScheduleId &&
+                    remainingSchedule.scheduleType == BOOKING &&
+                    (remainingSchedule.scheduleStatus == PENDING ||
+                     remainingSchedule.scheduleStatus == ACTIVE ||
+                     remainingSchedule.scheduleStatus == OVERDUE) {
+                    activeBooking = true;
+                    break;
+                }
+            }
+            if !activeBooking {
+                existingAsset.status = AVAILABLE;
+            }
+        }
 
         assetTable.put(existingAsset);
         return existingAsset.cloneReadOnly();
