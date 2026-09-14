@@ -1,0 +1,234 @@
+/*======================================================
+DESIGN TOKENS
+========================================================*/
+
+:root{
+    --ink: #16221e;
+    --ink-soft: #4a5852;
+    --paper: #f4f6f3;
+    --card: #ffffff;
+    --line:#d8ded9;
+    --accent: #1d6e56;
+    --accent-dark:#14503f;
+    --available: #1d6e56;
+    --available-bg: #e1f0ea;
+    --loaned: #8a5a12;
+    --loaned-bg: #f9ecd8;
+    --maintenance: #99361d;
+    --maintenance-bg: #fbe6de;
+    --disposed: #5f5e5a;
+    --disposed-bg: #ecebe6;
+}
+
+* { box-sizing: border-box;} /* makes padding not blow up width*/
+
+body {
+    margin: 0;
+    font-family: 'Inter', sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+}
+
+h1,h2,h3, .tab {font-family: 'Space Grotesk',sans-serif;}
+
+/*----- HEADER ------*/
+header {
+    padding: 28px 32px 20px;
+    background: var(--accent);
+    color: #ffffff;
+    border-bottom: 1px solid var(--line);
+}
+
+header h1 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0 0 4px;
+}
+
+header p {
+    margin: 0;
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 14px;
+}
+
+.conn-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 14px;
+    flex-wrap: wrap;
+}
+
+.conn-row input {
+    flex: 1; min-width: 200px;
+    padding: 9px 12px; border: 1pvax solid var(--line);
+    border-radius: 6px; font-size: 14px; font-family: inherit;
+    background: rgba(255, 255, 255, 0.95)
+}
+
+/*-------- BUTTOM --------*/
+button {
+    font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 500;
+    padding: 9px 16px; border-radius: 6px; border: none; cursor: pointer;
+    background: var(--accent-dark); 
+    color: #ffffff; 
+    transition: opacity 0.15s;
+}
+
+button:hover {
+    opacity: 0.88;
+}
+
+/*-------- LAYOUT (Sidebar + Content) --------*/
+.layout {
+    display: grid;
+    grid-template-columns: 240px 1fr; /* Sidebar fixed, content takes rest */
+    gap: 24px;
+    padding: 24px 32px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.tab {
+    padding: 12px 16px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--ink-soft);
+    cursor: pointer;
+    border-left: 3px solid transparent; 
+    border-radius: 0 6px 6px 0;
+}
+
+.tab:hover {background: rgba(0, 0, 0, 0.03); }
+
+.tab.active {
+    color: var(--accent);
+    border-left-color: var(--accent);
+    background: #ffffff;
+    font-weight: 600;
+}
+
+/*-- STAT CARD--*/
+.stat-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.stat-card {
+    background: #ffffff;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 16px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.stat-card span {
+    display: block;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-soft);
+    margin-bottom: 8px;
+}
+
+.stat-card strong {
+    display: block;
+    font-size: 24px;
+    font-family: 'Space Grotesk', sans-serif;
+    color: var(--ink);
+}
+
+/*--------- PANELS ----------*/
+
+/*By default every panel is hidden. The .active class shows it.*/
+.panel {display: none;}
+.panel.active {display: block;}
+.panel h2 {
+    font-size: 17px;
+    font-weight: 600;
+    margin: 0 0 4px;
+}
+.panel .sub {
+    color: var(--ink-soft);
+    font-size: 13px;
+    margin: 0 0 18px;
+}
+
+/*--------- FILTERS ----------*/
+.filters {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+}
+
+.filters input {
+    padding: 9px 12px; border: 1px solid var(--line);
+    border-radius: 6px; font-size: 14px; font-family: inherit;
+    flex: 1; min-width: 160px;
+}
+
+/*--------- ASSET CARDS ----------*/
+.card-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.asset-card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 10px; padding: 14px 16px;
+    display: flex; justify-content: space-between;
+    align-items: center; gap: 12px; flex-wrap: wrap;
+}
+.asset-card .meta {min-width: 200px;}
+.asset-card .tag {font-size: 12px; color: var(--ink-soft);}
+.asset-card .name {font-size: 15px; font-weight: 500; margin: 2px 0;}
+.asset-card .place {font-size: 13px; color: var(--ink-soft);}
+
+/*-------- STATUS BADGESS -----------*/
+.badge {
+    font-size: 12px; font-weight: 600; padding: 4px 10px;
+    border-radius: 20px; white-space: nowrap;
+}
+
+.badge.available {color: var(--available); background: var(--available-bg);}
+.badge.occupied {color: var(--loaned); background: var(--loaned-bg);}
+.badge.loaned_out {color: var(--loaned); background: var(--loaned-bg);}
+.badge.under_maintenance {color: var(--maintenance); background: var(--maintenance-bg);}
+.badge.disposed {color: var(--disposed); background: var(--disposed-bg);}
+
+/* ---------- EMPTY STATES ---------- */
+.empty {color: var(--ink-soft); font-size: 14px; padding: 20px 0;}
+
+/* ---------- FORMS ---------- */
+form.stack {display: flex; flex-direction: column; gap: 12px; max-width: 420px;}
+form.stack label {font-size: 13px; font-weight: 500; color: var(--ink-soft);}
+form.stack input, form.stack select, form.stack textarea {
+    padding: 9px; border: 1px solid var(--line);
+    border-radius: 6px; font-size: 14px; font-family: inherit;
+    margin-top: 4px; width: 100%;
+}
+
+/* Two-column layout for the Loan / Return panel */
+.two-col {display: grid; grid-template-columns: 1fr 1fr; gap: 24px;}
+
+/* ---------- STATUS MESSAGES ---------- */
+.status-msg { font-size: 13px; margin-top: 10px;}
+.status-msg.ok {color: var(--accent);}
+.status-msg.err {color: var(--maintenance);}
+
+/* ---------- RESPONSIVE ---------- */
+@media (max-width: 640px) {
+    header, .layout {padding-left: 16px; padding-right: 16px;}
+    .asset-card {flex-direction: column; align-items: flex-start;}
+    .two-col {grid-template-columns: 1fr;}
+    .stat-grid {grid-template-columns: 1fr 1fr;}
+}
