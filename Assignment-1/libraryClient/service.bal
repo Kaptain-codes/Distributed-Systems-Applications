@@ -80,6 +80,15 @@ type WorkOrder record {|
     Task[] tasks;
 |};
 
+type Institution record {|
+    string institutionId;
+    string name;
+|};
+
+type InstitutionUpdate record {
+    string? name = ();
+};
+
 // The main resource this client manages: a physical or electronic asset (e.g. a printer, a laptop, a microscope).
 type Asset record {|
     string assetTag;      // unique identifier for the asset
@@ -105,6 +114,7 @@ public function main() returns error? {
         io:println("3.Overdue Dashboard");
         io:println("4.Loan and Return");
         io:println("5.Schedule Manager");
+        io:println("6.Institution Manager");
         io:println("0.Exit");
 
         string choice = io:readln();
@@ -118,6 +128,7 @@ public function main() returns error? {
             "3" => {check overdueDashboard(backend);}
             "4" => {check loanAndReturn(backend);}
             "5" => {check scheduleManager(backend);}
+            "6" => {check institutionManager(backend);}
             "0" => {running = false;}
             _ => {io:println("Invalid choice");}
         }
@@ -342,7 +353,8 @@ function returnAsset(http:Client backend, string assetTag, string scheduleId) re
 // Lets the user add or partially update a maintenance/service schedule.
 function scheduleManager(http:Client backend) returns error? {
     io:println("1. Create Schedule");
-    io:println("2. Update Schedule");
+    io:println("2. Modify Schedule");
+    io:println("3. Remove Schedule");
     io:println("0. Back to Main Menu");
     string choice = io:readln();
 
@@ -358,6 +370,13 @@ function scheduleManager(http:Client backend) returns error? {
             io:println("Enter Schedule ID: ");
             string scheduleId = io:readln();
             check updateSchedule(backend, assetTag, scheduleId);
+        }
+        "3" => {
+            io:println("Enter Asset Tag: ");
+            string assetTag = io:readln();
+            io:println("Enter Schedule ID: ");
+            string scheduleId = io:readln();
+            check removeSchedule(backend, assetTag, scheduleId);
         }
         "0" => {
             io:println("Returning to main menu.");
@@ -420,6 +439,96 @@ function createSchedule(http:Client backend, string assetTag) returns error? {
     check handleResponse(response, "Schedule created successfully.");
 }
 
+function removeSchedule(http:Client backend, string assetTag, string scheduleId) returns error? {
+    http:Response|error response = backend->delete(
+        string `/assets/${assetTag}/schedules/${scheduleId}`);
+
+    if response is error {
+        io:println("Error occurred while removing the schedule: ", response.message());
+        return;
+    }
+    check handleResponse(response, "Schedule removed successfully.");
+}
+
+function institutionManager(http:Client backend) returns error? {
+    io:println("1. Add Institution");
+    io:println("2. Update Institution");
+    io:println("3. Remove Institution");
+    io:println("0. Back to Main Menu");
+    string choice = io:readln();
+
+    match choice {
+        "1" => {
+            check addInstitution(backend);
+        }
+        "2" => {
+            check updateInstitution(backend);
+        }
+        "3" => {
+            check removeInstitution(backend);
+        }
+        "0" => {
+            io:println("Returning to main menu.");
+        }
+        _ => {
+            io:println("Invalid choice");
+        }
+    }
+}
+
+function addInstitution(http:Client backend) returns error? {
+    io:println("Enter Institution ID: ");
+    string institutionId = io:readln();
+    io:println("Enter Name: ");
+    string name = io:readln();
+
+    Institution newInstitution = {
+        institutionId: institutionId,
+        name: name
+    };
+
+    http:Response|error response = backend->post("/institutions", newInstitution);
+
+    if response is error {
+        io:println("Error occurred while adding the institution: ", response.message());
+        return;
+    }
+    io:println("Institution added successfully.");
+}
+
+function updateInstitution(http:Client backend) returns error? {
+    io:println("Enter Institution ID of the institution to update: ");
+    string institutionId = io:readln();
+
+    InstitutionUpdate updatedInstitution = {};
+
+    io:println("Enter new Name (leave blank to skip): ");
+    string name = io:readln();
+    if name != "" {
+        updatedInstitution.name = name;
+    }
+
+    http:Response|error response = backend->put(string `/institutions/${institutionId}`, updatedInstitution);
+
+    if response is error {
+        io:println("Error occurred while updating the institution: ", response.message());
+        return;
+    }
+    io:println("Institution updated successfully.");
+}
+
+function removeInstitution(http:Client backend) returns error? {
+    io:println("Enter Institution ID to remove");
+    string institutionId = io:readln();
+
+    http:Response|error response = backend->delete(string `/institutions/${institutionId}`);
+    if response is error {
+        io:println("Error occurred while removing the institution: ", response.message());
+        return;
+    }
+
+    check handleResponse(response, "Institution removed successfully.");
+}
 type ScheduleUpdate record {|
     ScheduleType? scheduleType = ();
     ScheduleStatus? scheduleStatus = ();

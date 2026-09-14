@@ -12,7 +12,7 @@ flowchart LR
     end
     subgraph API[Gateway/API Layer]
         HTTP[Library HTTP API\n:9090]
-        GRPC[RentalService gRPC API\n:9090]
+        GRPC[RentalService gRPC API\n:9092]
     end
     subgraph B[Business Services]
         Asset[Asset and institution operations]
@@ -43,7 +43,7 @@ flowchart LR
 | `instituteTable` | Stores institutions keyed by `institutionId` | [repository.bal](libraryService/repository.bal#L7-L8) |
 | `OverdueSchedulerJob` | Marks active or pending schedules overdue | [automatedJobs.bal](libraryService/automatedJobs.bal) |
 | `RentalService` | gRPC contract for property, user, search and booking operations | [rental.proto](rental.proto#L281-L297) |
-| Generated bindings | gRPC server/client message and stub support | [rentalservice_service.bal](modules/rentalService/rentalservice_service.bal), [rental_pb.bal](modules/rentalService/rental_pb.bal) |
+| Generated bindings | gRPC server/client message and stub support | [rentalservice_service.bal](rentalService/rentalservice_service.bal), [rental_pb.bal](rentalService/rental_pb.bal), [rental_pb.bal](rentalClient/rental_pb.bal) |
 
 ## HTTP API entry points
 
@@ -77,7 +77,7 @@ Evidence: [service.bal](libraryService/service.bal#L286-L327).
 
 ## gRPC API
 
-The server listens on gRPC port `9090`, as declared in [rentalservice_service.bal](modules/rentalService/rentalservice_service.bal#L1-L6). The protobuf contract defines:
+The server listens on gRPC port `9092`, as declared in [rentalservice_service.bal](rentalService/rentalservice_service.bal#L1-L6). The protobuf contract defines:
 
 - `AddProperty`
 - `UpdateProperty`
@@ -100,7 +100,7 @@ The HTTP service schedules `OverdueSchedulerJob` every 300 seconds. The job scan
 
 - Ballerina distribution `2201.13.4`: [Ballerina.toml](libraryService/Ballerina.toml#L1-L9).
 - HTTP: `ballerina/http`, [service.bal](libraryService/service.bal#L1-L4).
-- gRPC and protobuf: [Dependencies.toml](Dependencies.toml#L50-L71), [rental_pb.bal](modules/rentalService/rental_pb.bal#L1-L2).
+- gRPC and protobuf: [Dependencies.toml](rentalService/Dependencies.toml#L1-L20), [rental_pb.bal](rentalService/rental_pb.bal#L1-L2).
 - Built-in Ballerina observability is included: [Ballerina.toml](libraryService/Ballerina.toml#L7-L9).
 
 No Assignment 1 Dockerfile, Compose service, deployment manifest or CI/CD workflow exists.
@@ -120,5 +120,5 @@ The repository includes service tests under [libraryService/tests](libraryServic
 ## Verification notes
 
 - Generated gRPC code must remain consistent with [rental.proto](rental.proto).
-- The HTTP service and gRPC service both use port `9090`, but they are separate processes/listeners and cannot share the same host port when run simultaneously without a port change.
+- The HTTP service uses port `9090` and the gRPC service uses port `9092`, so they can run simultaneously.
 - The repository’s generic test template references `/greeting`, which is not an implemented Assignment 1 route; inspect [service_test.bal](libraryService/tests/service_test.bal#L15-L26) before relying on it.
