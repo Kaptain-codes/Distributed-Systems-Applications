@@ -80,6 +80,15 @@ type WorkOrder record {|
     Task[] tasks;
 |};
 
+type Institution record {|
+    string institutionId;
+    string name;
+|};
+
+type InstitutionUpdate record {
+    string? name = ();
+};
+
 // The main resource this client manages: a physical or electronic asset (e.g. a printer, a laptop, a microscope).
 type Asset record {|
     string assetTag;      // unique identifier for the asset
@@ -105,6 +114,7 @@ public function main() returns error? {
         io:println("3.Overdue Dashboard");
         io:println("4.Loan and Return");
         io:println("5.Schedule Manager");
+        io:println("6.Institution Manager");
         io:println("0.Exit");
 
         string choice = io:readln();
@@ -118,6 +128,7 @@ public function main() returns error? {
             "3" => {check overdueDashboard(backend);}
             "4" => {check loanAndReturn(backend);}
             "5" => {check scheduleManager(backend);}
+            "6" => {check institutionManager(backend);}
             "0" => {running = false;}
             _ => {io:println("Invalid choice");}
         }
@@ -344,7 +355,8 @@ function returnAsset(http:Client backend, string assetTag, string scheduleId) re
 // for schedules yet.
 function scheduleManager(http:Client backend) returns error? {
     io:println("1. Create Schedule");
-    io:println("2. Update Schedule (Currently Disabled)");
+    io:println("2. Modify Schedule");
+    io:println("3. Remove Schedule");
     io:println("0. Back to Main Menu");
     string choice = io:readln();
 
@@ -354,15 +366,20 @@ function scheduleManager(http:Client backend) returns error? {
             string assetTag = io:readln();
             check createSchedule(backend, assetTag);
         }
-        // Disabled: no PUT /assets/{tag}/schedules/{scheduleId} endpoint
-        // exists on the backend yet. Re-enable once that's added.
-        // "2" => {
-        //     io:println("Enter Asset Tag: ");
-        //     string assetTag = io:readln();
-        //     io:println("Enter Schedule ID: ");
-        //     string scheduleId = io:readln();
-        //     check updateSchedule(backend, assetTag, scheduleId);
-        // }
+          "2" => {
+             io:println("Enter Asset Tag: ");
+             string assetTag = io:readln();
+             io:println("Enter Schedule ID: ");
+             string scheduleId = io:readln();
+             check modifySchedule(backend, assetTag, scheduleId);
+         }
+         "3" => {
+             io:println("Enter Asset Tag: ");
+             string assetTag = io:readln();
+             io:println("Enter Schedule ID: ");
+             string scheduleId = io:readln();
+             check removeSchedule(backend, assetTag, scheduleId);
+         }
         "0" => {
             io:println("Returning to main menu.");
         }
@@ -424,40 +441,151 @@ function createSchedule(http:Client backend, string assetTag) returns error? {
     check handleResponse(response, "Schedule created successfully.");
 }
 
-// Disabled — see scheduleManager() above. Kept here so the logic isn't lost
-// if a PUT endpoint for updating schedules gets added to the backend later.
+function removeSchedule(http:Client backend, string assetTag, string scheduleId) returns error? {
+     http:Response|error response = backend->delete(
+        string `/assets/${assetTag}/schedules/${scheduleId}`);
 
-// function updateSchedule(http:Client backend, string assetTag, string scheduleId) returns error? {
-//     io:println("Enter Schedule Status (PENDING, ACTIVE, COMPLETED, CANCELLED, OVERDUE): ");
-//     string scheduleStatusInput = io:readln();
+     if response is error {
+         io:println("Error occurred while updating the schedule: ", response.message());
+         return;
+     }
+     check handleResponse(response, "Schedule removed succesfully");
+ }
 
-//     ScheduleStatus scheduleStatus;
-//     match scheduleStatusInput {
-//         PENDING => {scheduleStatus = PENDING;}
-//         ACTIVE => {scheduleStatus = ACTIVE;}
-//         COMPLETED => {scheduleStatus = COMPLETED;}
-//         CANCELLED => {scheduleStatus = CANCELLED;}
-//         OVERDUE => {scheduleStatus = OVERDUE;}
-//         _ => {
-//             io:println("Invalid schedule status"); 
-//             return;
-//         }
-//     }
+// Modifies a schedule by deleting the old one and re-adding it with new values.
+// The server has no PUT endpoint for schedules, so we simulate "update" using
+// the two endpoints it does have: DELETE and POST.
+function modifySchedule(http:Client backend, string assetTag, string scheduleId) returns error? {
+    io:println("Enter new Schedule Type (ROUTINE_SERVICE, MAINTENANCE, BOOKING): ");
+    string typeInput = io:readln();
 
-//     Schedule updatedSchedule = {
-//         scheduleId: scheduleId,
-//         scheduleType: BOOKING,
-//         scheduleStatus: scheduleStatus,
-//         startTime: time:utcNow(),
-//         dueDate: time:utcNow(),
-//         description: "Updated schedule"
-//     };
+    ScheduleType scheduleType = BOOKING;
+    match typeInput {
+        "MAINTENANCE" => {scheduleType = MAINTENANCE;}
+        "ROUTINE_SERVICE" => {scheduleType = ROUTINE_SERVICE;}
+        "BOOKING" => {scheduleType = BOOKING;}
+        _ => { io:println("Invalid type"); return; }
+    }
 
-//     http:Response|error response = backend->put(string `/assets/${assetTag}/schedules/${scheduleId}`, updatedSchedule);
+    io:println("Enter new Start Time (YYYY-MM-DD): ");
+    string startInput = io:readln();
+    time:Utc startTime = check time:utcFromString(startInput + "T00:00:00Z");
 
-//     if response is error {
-//         io:println("Error occurred while updating the schedule: ", response.message());
-//         return;
-//     }
-//     io:println("Schedule updated successfully.");
-// }
+    io:println("Enter new Due Date (YYYY-MM-DD): ");
+    string dueInput = io:readln();
+    time:Utc dueDate = check time:utcFromString(dueInput + "T00:00:00Z");
+
+    io:println("Enter new Description: ");
+    string description = io:readln();
+
+    // Step 1 — remove the existing schedule
+    http:Response|error delResp = backend->delete(
+        string `/assets/${assetTag}/schedules/${scheduleId}`
+    );
+    if delResp is error {
+        io:println("Failed to remove old schedule: ", delResp.message());
+        return;
+    }
+    if delResp.statusCode < 200 || delResp.statusCode >= 300 {
+        io:println("No schedule '", scheduleId, "' found on asset '", assetTag, "'.");
+        return;
+    }
+
+    // Step 2 — re-add with the same ID but new fields
+    Schedule updated = {
+        scheduleId: scheduleId,
+        scheduleType: scheduleType,
+        scheduleStatus: PENDING,
+        startTime: startTime,
+        dueDate: dueDate,
+        description: description
+    };
+    http:Response|error postResp = backend->post(
+        string `/assets/${assetTag}/schedules`, updated
+    );
+    if postResp is error {
+        io:println("Old schedule removed, but re-add failed: ", postResp.message());
+        return;
+    }
+    check handleResponse(postResp, "Schedule modified successfully.");
+}
+
+function institutionManager(http:Client backend) returns error? {
+    io:println("1. Add Institution");
+    io:println("2. Update Institution");
+    io:println("3. Remove Institution");
+    io:println("0. Back to Main Menu");
+    string choice = io:readln();
+
+    match choice {
+        "1" => {
+            check addInstitution(backend);
+        }
+        "2" => {
+            check updateInstitution(backend);
+        }
+        "3" => {
+            check removeInstitution(backend);
+        }
+        "0" => {
+            io:println("Returning to main menu.");
+        }
+        _ => {
+            io:println("Invalid choice");
+        }
+    }
+}
+
+function addInstitution(http:Client backend) returns error? {
+    io:println("Enter Institution ID: ");
+    string institutionId = io:readln();
+    io:println("Enter Name: ");
+    string name = io:readln();
+
+    Institution newInstitution = {
+        institutionId: institutionId,
+        name: name
+    };
+
+    http:Response|error response = backend->post("/institutions", newInstitution);
+
+    if response is error {
+        io:println("Error occurred while adding the institution: ", response.message());
+        return;
+    }
+    io:println("Institution added successfully.");
+}
+
+function updateInstitution(http:Client backend) returns error? {
+    io:println("Enter Institution ID of the institution to update: ");
+    string institutionId = io:readln();
+
+    InstitutionUpdate updatedInstitution = {};
+
+    io:println("Enter new Name (leave blank to skip): ");
+    string name = io:readln();
+    if name != "" {
+        updatedInstitution.name = name;
+    }
+
+    http:Response|error response = backend->put(string `/institutions/${institutionId}`, updatedInstitution);
+
+    if response is error {
+        io:println("Error occurred while updating the institution: ", response.message());
+        return;
+    }
+    io:println("Institution updated successfully.");
+}
+
+function removeInstitution(http:Client backend) returns error? {
+    io:println("Enter Institution ID to remove");
+    string institutionId = io:readln();
+
+    http:Response|error response = backend->delete(string `/institutions/${institutionId}`);
+    if response is error {
+        io:println("Error occurred while removing the institution: ", response.message());
+        return;
+    }
+
+    check handleResponse(response, "Institution removed successfully.");
+}
