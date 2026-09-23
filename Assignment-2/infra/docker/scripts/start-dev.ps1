@@ -13,7 +13,7 @@ if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
 
 # 1. Environment and Password Setup Lifecycle
 if (-not (Test-Path $EnvFile)) {
-    Write-Host "🔄 Local .env configuration missing. Building clean file..." -ForegroundColor Cyan
+    Write-Host "Local .env configuration missing. Building clean file..." -ForegroundColor Cyan
     if (Test-Path $ExampleFile) { Copy-Item $ExampleFile $EnvFile } else { New-Item $EnvFile -ItemType File | Out-Null }
 
     # Password generation rules matching engine standards
@@ -34,7 +34,7 @@ if (-not (Test-Path $EnvFile)) {
     Add-Content -Path $EnvFile -Value "NOTIFICATION_DB_PASSWORD=$NotificationDbPass"
     Add-Content -Path $EnvFile -Value "ADMIN_DB_PASSWORD=$AdminDbPass"
 
-    Write-Host "✅ Unique environment file initialized!" -ForegroundColor Green
+    Write-Host "Unique environment file initialized!" -ForegroundColor Green
 }
 
 # 2. Scope of Work Profile Menu Selector
@@ -62,26 +62,26 @@ $Profiles = @{
 
 $Choice = Read-Host "Select a profile [1-5]"
 if (-not $Profiles.ContainsKey($Choice)) {
-    Write-Host "❌ Selection aborted: choose a number from 1 to 5." -ForegroundColor Red
+    Write-Host "Selection aborted: choose a number from 1 to 5." -ForegroundColor Red
     exit 1
 }
 # Simple check for the .env file existence, but do not overwrite it if it exists. This is to avoid losing any manually set passwords or configurations.
 if (-not (Test-Path $EnvFile)) {
-    Write-Host "🔄 Local .env configuration missing. Building clean file..." -ForegroundColor Cyan
+    Write-Host "Local .env configuration missing. Building clean file..." -ForegroundColor Cyan
     ...
 } else {
-    Write-Host "ℹ️  Using existing .env — delete it manually if you want fresh passwords (this will require wiping DB volumes too)." -ForegroundColor DarkGray
+    Write-Host "Using existing .env - delete it manually if you want fresh passwords (this will require wiping DB volumes too)." -ForegroundColor DarkGray
 }
 
 $TargetProfile = $Profiles[$Choice]
 
 # 3. Execution Engine
-Write-Host "`n🚀 Starting '$TargetProfile' profile containers..." -ForegroundColor Green
+Write-Host "`nStarting '$TargetProfile' profile containers..." -ForegroundColor Green
 docker compose --profile $TargetProfile up -d
 
 if ($LASTEXITCODE -eq 0) {
-    Write-Host "`n🎉 Development containers are running for '$TargetProfile'." -ForegroundColor Green
+    Write-Host "`nDevelopment containers are running for '$TargetProfile'." -ForegroundColor Green
 } else {
-    Write-Host "`n❌ Docker Compose failed — check the error above." -ForegroundColor Red
+    Write-Host "`nDocker Compose failed - check the error above." -ForegroundColor Red
     exit $LASTEXITCODE
 }
