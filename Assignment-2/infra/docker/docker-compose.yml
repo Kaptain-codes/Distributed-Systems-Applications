@@ -291,23 +291,6 @@ services:
 
   # Wilgano
   order-db:
-    image: mysql:8
-    profiles: ["order-customer", "all"]
-    environment:
-      MYSQL_ROOT_PASSWORD: ${ORDER_DB_PASSWORD:?Set ORDER_DB_PASSWORD in .env}
-    ports:
-      - "${ORDER_DB_PORT:-1434}:3306"
-    volumes:
-      - "order-db-data:/var/lib/mysql"
-    healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 30s
-    networks: [backbone]
-
-  customer-db:
     image: mongo:7
     profiles: ["order-customer", "all"]
     environment:
@@ -323,6 +306,23 @@ services:
       # auth fails every time) — this cost real debugging time before
       # being caught via docker compose ps showing "unhealthy".
       test: ["CMD-SHELL", "mongosh --quiet -u \"$$MONGO_INITDB_ROOT_USERNAME\" -p \"$$MONGO_INITDB_ROOT_PASSWORD\" --authenticationDatabase admin --eval \"db.adminCommand('ping')\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks: [backbone]
+
+  customer-db:
+    image: mysql:8
+    profiles: ["order-customer", "all"]
+    environment:
+      MYSQL_ROOT_PASSWORD: ${ORDER_DB_PASSWORD:?Set ORDER_DB_PASSWORD in .env}
+    ports:
+      - "${ORDER_DB_PORT:-1434}:3306"
+    volumes:
+      - "order-db-data:/var/lib/mysql"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
       interval: 10s
       timeout: 5s
       retries: 12
