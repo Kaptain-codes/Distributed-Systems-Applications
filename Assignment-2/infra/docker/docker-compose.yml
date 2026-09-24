@@ -295,16 +295,12 @@ services:
     profiles: ["order-customer", "all"]
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:?Set MONGO_ROOT_USER in .env}
-      MONGO_INITDB_ROOT_PASSWORD: ${CUSTOMER_DB_PASSWORD:?Set CUSTOMER_DB_PASSWORD in .env}
+      MONGO_INITDB_ROOT_PASSWORD: ${ORDER_DB_PASSWORD:?Set ORDER_DB_PASSWORD in .env}
     ports:
-      - "${CUSTOMER_DB_PORT:-27017}:27017"
+      - "${ORDER_DB_PORT:-27017}:27017"
     volumes:
-      - "customer-db-data:/data/db"
+      - "order-db-data:/data/db"
     healthcheck:
-      # CMD-SHELL required, not exec-form CMD: exec form doesn't expand
-      # $$VARS at all (they get passed to mongosh as a literal string,
-      # auth fails every time) — this cost real debugging time before
-      # being caught via docker compose ps showing "unhealthy".
       test: ["CMD-SHELL", "mongosh --quiet -u \"$$MONGO_INITDB_ROOT_USERNAME\" -p \"$$MONGO_INITDB_ROOT_PASSWORD\" --authenticationDatabase admin --eval \"db.adminCommand('ping')\" || exit 1"]
       interval: 10s
       timeout: 5s
@@ -316,11 +312,11 @@ services:
     image: mysql:8
     profiles: ["order-customer", "all"]
     environment:
-      MYSQL_ROOT_PASSWORD: ${ORDER_DB_PASSWORD:?Set ORDER_DB_PASSWORD in .env}
+      MYSQL_ROOT_PASSWORD: ${CUSTOMER_DB_PASSWORD:?Set CUSTOMER_DB_PASSWORD in .env}
     ports:
-      - "${ORDER_DB_PORT:-1434}:3306"
+      - "${CUSTOMER_DB_PORT:-1434}:3306"
     volumes:
-      - "order-db-data:/var/lib/mysql"
+      - "customer-db-data:/var/lib/mysql"
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
       interval: 10s
