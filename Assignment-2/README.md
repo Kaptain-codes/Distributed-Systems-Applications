@@ -22,8 +22,8 @@ flowchart LR
         Delivery[delivery-service\n/delivery :9090]
     end
     subgraph D[Data Layer]
-        MySQL[order-db, restaurant-db, payment-db\nMySQL 8]
-        Mongo[customer-db, notification-db, admin-db\nMongoDB 7]
+        MySQL[customer-db, restaurant-db, payment-db\nMySQL 8.4]
+        Mongo[order-db, notification-db, admin-db\nMongoDB 7.0]
         MSSQL[delivery-db\nSQL Server 2022]
         Redis[payment-redis, notification-redis\nRedis 7]
     end
@@ -96,11 +96,11 @@ The service names are used as Docker DNS hostnames and `9090` is the container-s
 ```mermaid
 flowchart TB
     subgraph Services[Business service ownership declared by Compose]
-        O[order-service] --> ODB[(order-db\nMySQL 8)]
+        O[order-service] --> ODB[(order-db\nMongoDB 7.0)]
         R[restaurant-service] --> RDB[(restaurant-db\nMySQL 8)]
         P[payment-service] --> PDB[(payment-db\nMySQL 8)]
         D[delivery-service] --> DDB[(delivery-db\nSQL Server 2022)]
-        C[customer-service] --> CDB[(customer-db\nMongoDB 7)]
+        C[customer-service] --> CDB[(customer-db\nMySQL 8.4)]
         N[notification-service] --> NDB[(notification-db\nMongoDB 7)]
         A[admin-service] --> ADB[(admin-db\nMongoDB 7)]
         P -. Compose dependency .-> PR[(payment-redis)]
@@ -118,7 +118,7 @@ Kafka topics are created by the one-shot `kafka-init` container from [create-top
 flowchart LR
     subgraph Host[Developer host]
         Compose[docker compose --profile ... up -d]
-        Ports[8080-8087, 9092, 29092, 2181,\n1434-1437, 27017-27019, 6380-6381]
+        Ports[127.0.0.1:8080-8087, 29092, 2181,\n1434-1437, 27017-27019]
     end
     subgraph Net[backbone bridge network]
         G[ gateway ]
@@ -149,13 +149,13 @@ Every profile starts the shared gateway, Kafka, ZooKeeper and topic initializer.
 
 | Profile | Application services | Supporting services |
 | --- | --- | --- |
-| `order-customer` | order `8081`, customer `8082` | order MySQL `1434`, customer MongoDB `27017` |
-| `notification-admin` | notification `8083`, admin `8085` | notification MongoDB `27018`, admin MongoDB `27019`, notification Redis `6381` |
-| `restaurant-payment` | restaurant `8087`, payment `8084` | restaurant MySQL `1435`, payment MySQL `1436`, payment Redis `6380` |
+| `order-customer` | order `8081`, customer `8082` | order MongoDB `27017`, customer MySQL `3307` |
+| `notification-admin` | notification `8083`, admin `8085` | notification MongoDB `27018`, admin MongoDB `27019`, notification Redis (internal only) |
+| `restaurant-payment` | restaurant `8087`, payment `8084` | restaurant MySQL `3308`, payment MySQL `3309`, payment Redis (internal only) |
 | `delivery` | delivery `8086` | delivery MSSQL `1437` |
 | `all` | all seven services | all databases and both Redis instances |
 
-Shared host ports: gateway `8080`, Kafka `9092` and `29092`, ZooKeeper `2181`. Container-side application port is always `9090`.
+Host clients use gateway `localhost:8080`, Kafka `localhost:29092`, and ZooKeeper `localhost:2181`. Containers use `kafka:9092`; application services use port `9090` internally. Published ports bind to loopback by default.
 
 ## Configuration and secrets
 
@@ -168,6 +168,7 @@ The gateway has configurable Ballerina values for its port and downstream URLs, 
 From `Assignment-2/infra/docker`:
 
 ```powershell
+cd Assignment-2/infra/docker
 .\scripts\start-dev.ps1
 ```
 
@@ -178,7 +179,8 @@ The script creates `.env` if missing, generates local passwords once, prompts fo
 .\scripts\start-containers.ps1
 ```
 
-To remove selected profile volumes and reinitialize credentials:
+To remove selected profile volumes so databases reinitialize with the current
+`.env` credentials:
 
 ```powershell
 .\scripts\reset-dev-data.ps1
@@ -194,7 +196,7 @@ Compose checks:
 - Services: `GET http://localhost:9090/<service>/health`
 - Kafka with `kafka-topics`
 - ZooKeeper with a TCP port probe
-- MySQL with `mysqladmin`
+- MySQL with an authenticated `SELECT 1`
 - MongoDB with authenticated `mongosh`
 - MSSQL with `sqlcmd`
 - Redis with `redis-cli ping`
@@ -204,7 +206,9 @@ Evidence: [docker-compose.yml](infra/docker/docker-compose.yml#L21-L33), [docker
 ## Technologies and observability
 
 - Ballerina HTTP services and gateway.
-- Docker Compose and bridge networking.
+- Docker Compose v2.20+ and bridge networking.
+- Docker Desktop with enough memory for the selected profile; measure the full
+  profile with `docker stats` and use at least the observed peak plus headroom.
 - Confluent Kafka/ZooKeeper.
 - MySQL 8, MongoDB 7, SQL Server 2022 and Redis 7.
 - Java 21 JRE application runtime.
@@ -214,15 +218,11 @@ No metrics exporter, tracing backend, dashboard, alerting configuration or centr
 
 ## Known inconsistencies
 
-1. Compose contains a stale comment claiming the gateway uses `_service` downstream paths, but [gateway/service.bal](gateway/service.bal#L35-L60) uses the implemented short paths.
-2. Application health checks invoke `curl`, but the minimal runtime Dockerfiles do not install `curl`; verify the image before relying on those checks.
-3. Gateway dependencies are marked optional in Compose while clients for all services are eagerly constructed in [gateway/service.bal](gateway/service.bal#L19-L25).
-4. Service tests target `/greeting`, while implementations expose only `/.../health`.
-5. Package/devcontainer distribution is `2201.13.4`, while Docker build images use `2201.13.5`.
-6. MSSQL uses mutable `2022-latest` with a hard-coded `mssql-tools18` path.
-7. No `restart` policies are configured.
-8. Databases, Redis, Kafka and ZooKeeper are host-published; this is suitable for local development, not a production security boundary.
-9. No CI/CD or production deployment infrastructure exists. `infra/k8s` is empty.
+1. Service tests and image builds must remain aligned with the `/.../health`
+   endpoints; the build pipeline should be checked after dependency fixes.
+2. No `restart` policies are configured; this is intentional for local
+   development.
+3. No CI/CD or production deployment infrastructure exists. `infra/k8s` is empty.
 
 ## Architecture verification checklist
 

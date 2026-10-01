@@ -13,17 +13,17 @@ function beforeSuiteFunc() {
 // Test function
 @test:Config {}
 function testServiceWithProperName() {
-    string|error response = testClient->/greeting(name = "John");
-    test:assertEquals(response, "Hello, John");
+    json|error response = testClient->/admin/health;
+    test:assertEquals(response, {status: "UP", 'service: "admin"});
 }
 
 // Negative test function
 @test:Config {}
 function testServiceWithEmptyName() returns error? {
-    http:Response response = check testClient->/greeting;
-    test:assertEquals(response.statusCode, 500);
-    json errorPayload = check response.getJsonPayload();
-    test:assertEquals(errorPayload.message, "name should not be empty!");
+    http:Response response = check testClient->/admin/health;
+    test:assertEquals(response.statusCode, 200);
+    json healthPayload = check response.getJsonPayload();
+    test:assertEquals(healthPayload, {status: "UP", 'service: "admin"});
 }
 
 // After Suite Function

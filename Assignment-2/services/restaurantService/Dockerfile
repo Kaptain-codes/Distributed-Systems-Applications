@@ -1,7 +1,7 @@
-FROM ballerina/ballerina:2201.13.5 AS build
+FROM ballerina/ballerina:2201.13.4 AS build
 WORKDIR /app
-COPY . .
-RUN bal build --offline=false
+COPY --chown=ballerina:ballerina . .
+RUN bal build
 
 FROM eclipse-temurin:21-jre-jammy
 WORKDIR /app

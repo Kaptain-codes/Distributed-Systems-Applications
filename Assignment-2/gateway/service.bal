@@ -32,31 +32,66 @@ service /api on new http:Listener(port) {
 
     // These resources functions are used for reverse proxying the requests to the respective services. 
     // The path of the request is used to determine which service to forward the request to.
-    resource function get orders/[string id]() returns json|error {
-        return orderClient->get(string `/order/${id}`);
+    resource function get orders/[string id]() returns json|http:Response {
+        json|error result = orderClient->get(string `/order/${id}`);
+        if result is error {
+            return unavailableResponse(result);
+        }
+        return result;
     }
 
-    resource function get customer/[string id]() returns json|error {
-        return customerClient->get(string `/customer/${id}`);
+    resource function get customer/[string id]() returns json|http:Response {
+        json|error result = customerClient->get(string `/customer/${id}`);
+        if result is error {
+            return unavailableResponse(result);
+        }
+        return result;
     }
 
-    resource function get notifications/[string id]() returns json|error {
-        return notificationClient->get(string `/notification/${id}`);
+    resource function get notifications/[string id]() returns json|http:Response {
+        json|error result = notificationClient->get(string `/notification/${id}`);
+        if result is error {
+            return unavailableResponse(result);
+        }
+        return result;
     }
 
-    resource function get payments/[string id]() returns json|error {
-        return paymentClient->get(string `/payment/${id}`);
+    resource function get payments/[string id]() returns json|http:Response {
+        json|error result = paymentClient->get(string `/payment/${id}`);
+        if result is error {
+            return unavailableResponse(result);
+        }
+        return result;
     }
 
-    resource function get admin/[string id]() returns json|error {
-        return adminClient->get(string `/admin/${id}`);
+    resource function get admin/[string id]() returns json|http:Response {
+        json|error result = adminClient->get(string `/admin/${id}`);
+        if result is error {
+            return unavailableResponse(result);
+        }
+        return result;
     }
 
-    resource function get delivery/[string id]() returns json|error {
-        return deliveryClient->get(string `/delivery/${id}`);
+    resource function get delivery/[string id]() returns json|http:Response {
+        json|error result = deliveryClient->get(string `/delivery/${id}`);
+        if result is error {
+            return unavailableResponse(result);
+        }
+        return result;
     }
 
-    resource function get restaurant/[string id]() returns json|error {
-        return restaurantClient->get(string `/restaurant/${id}`);
+    resource function get restaurant/[string id]() returns json|http:Response {
+        json|error result = restaurantClient->get(string `/restaurant/${id}`);
+        if result is error {
+            return unavailableResponse(result);
+        }
+        return result;
     }
+}
+
+function unavailableResponse(error _err) returns http:Response {
+    http:Response response = new;
+    response.statusCode = 503;
+    response.setJsonPayload({status: "DOWN", message: "downstream service unavailable"});
+    return response;
 }

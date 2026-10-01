@@ -343,4 +343,3 @@ dependencies = [
 modules = [
 	{org = "wykva", packageName = "adminService", moduleName = "adminService"}
 ]
-

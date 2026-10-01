@@ -12,6 +12,10 @@ service /assets on httpListener {
             300
         );
     }
+    // GET - READ
+    // POST - CREATE
+    // PUT - UPDATE
+    // DELETE - DELETE
     
     isolated resource function post .(@http:Payload Asset payload) returns http:Created|http:InternalServerError|http:UnprocessableEntity|http:Conflict {
         Asset|error result = addAsset(payload);

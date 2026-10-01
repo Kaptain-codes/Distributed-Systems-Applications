@@ -25,6 +25,7 @@ TOPICS=(
   "restaurant.ready"
 
   "delivery.assigned"
+  "delivery.picked_up"
   "delivery.not_assigned"
   "delivery.completed"
   "delivery.cancelled"
@@ -47,6 +48,7 @@ TOPICS=(
   "restaurant.preparing.dlq"
   "restaurant.ready.dlq"
   "delivery.assigned.dlq"
+  "delivery.picked_up.dlq"
   "delivery.not_assigned.dlq"
   "delivery.completed.dlq"
   "delivery.cancelled.dlq"
