@@ -6,7 +6,8 @@
 #>
 
 $DockerDir = Join-Path $PSScriptRoot ".."
-Set-Location -Path $DockerDir
+Push-Location -Path $DockerDir
+try {
 
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
     throw "Docker CLI was not found. Install Docker Desktop and try again."
@@ -45,3 +46,6 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "Development data reset completed for '$($profiles[$choice])'." -ForegroundColor Green
+} finally {
+    Pop-Location
+}

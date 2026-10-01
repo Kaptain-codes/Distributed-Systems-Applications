@@ -30,16 +30,38 @@ TOPICS=(
   "delivery.cancelled"
   "delivery.failed"
 
-  "orders.created.DLQ"
-  "payments.completed.DLQ"
-  "restaurant.accepted.DLQ"
-  "restaurant.rejected.DLQ"
-  "delivery.not_assigned.DLQ"
-  "delivery.assigned.DLQ"
+  "orders.created.dlq"
+  "orders.confirmed.dlq"
+  "orders.preparing.dlq"
+  "orders.ready.dlq"
+  "orders.out_for_delivery.dlq"
+  "orders.delivered.dlq"
+  "orders.cancelled.dlq"
+  "orders.autocancelled.dlq"
+  "payments.completed.dlq"
+  "payments.failed.dlq"
+  "payments.cancelled.dlq"
+  "payments.refunded.dlq"
+  "restaurant.accepted.dlq"
+  "restaurant.rejected.dlq"
+  "restaurant.preparing.dlq"
+  "restaurant.ready.dlq"
+  "delivery.assigned.dlq"
+  "delivery.not_assigned.dlq"
+  "delivery.completed.dlq"
+  "delivery.cancelled.dlq"
+  "delivery.failed.dlq"
 )
 
 echo "Waiting for Kafka to accept requests..."
+attempt=0
+max_attempts=60
 until kafka-topics --bootstrap-server "$BOOTSTRAP_SERVER" --list > /dev/null 2>&1; do
+  attempt=$((attempt + 1))
+  if [ "$attempt" -ge "$max_attempts" ]; then
+    echo "Kafka did not become ready after $max_attempts attempts." >&2
+    exit 1
+  fi
   sleep 2
 done
 

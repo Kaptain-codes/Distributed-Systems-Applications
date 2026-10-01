@@ -17,7 +17,7 @@ services:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
     ports:
-      - "2181:2181"
+      - "127.0.0.1:${ZOOKEEPER_PORT:-2181}:2181"
     healthcheck:
       # TCP-only check. The `ruok` 4-letter-word command never worked on
       # this image despite ZOOKEEPER_4LW_COMMANDS_WHITELIST being set
@@ -46,9 +46,12 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
     ports:
-      - "9092:9092"
-      - "29092:29092"
+      - "127.0.0.1:${KAFKA_HOST_PORT:-29092}:29092"
     healthcheck:
       # timeout bumped 5s -> 15s: kafka-topics is a JVM CLI with its own
       # startup overhead, and 5s wasn't reliably enough once 20+ containers
@@ -64,8 +67,6 @@ services:
 
   # ---------------------------------------------------------------
   # Creates required Kafka topics once the broker is healthy.
-  # PLACEHOLDER topic list in kafka/create-topics.sh — replace with
-  # your real topics.
   # ---------------------------------------------------------------
   kafka-init:
     image: confluentinc/cp-kafka:7.6.0
@@ -81,40 +82,34 @@ services:
 
   # ---------------------------------------------------------------
   # API gateway
-  # KNOWN BUG (not yet fixed in gateway.bal): downstream client calls use
-  # /order_service, /user_service, /notification_service, /payment_service,
-  # /admin_service, /delivery_service, /restaurant_service — but every real
-  # service is mounted at the short name instead (/order, /customer,
-  # /notification, /payment, /admin, /delivery, /restaurant). Every proxied
-  # gateway route will 404 until gateway.bal's client paths are corrected.
   # ---------------------------------------------------------------
   gateway:
     build: ../../gateway
     profiles: ["order-customer", "restaurant-payment", "delivery", "notification-admin", "all"]
     depends_on:
       order-service:
-        condition: service_healthy
+        condition: service_started
         required: false
       customer-service:
-        condition: service_healthy
+        condition: service_started
         required: false
       notification-service:
-        condition: service_healthy
+        condition: service_started
         required: false
       admin-service:
-        condition: service_healthy
+        condition: service_started
         required: false
       payment-service:
-        condition: service_healthy
+        condition: service_started
         required: false
       restaurant-service:
-        condition: service_healthy
+        condition: service_started
         required: false
       delivery-service:
-        condition: service_healthy
+        condition: service_started
         required: false
     ports:
-      - "8080:8080"
+      - "127.0.0.1:${GATEWAY_PORT:-8080}:8080"
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8080/api/health || exit 1"]
       interval: 10s
@@ -128,7 +123,7 @@ services:
     build: ../../services/orderService
     profiles: ["order-customer", "all"]
     ports:
-      - "8081:9090"
+      - "127.0.0.1:${ORDER_SERVICE_PORT:-8081}:9090"
     depends_on:
       kafka-init:
         condition: service_completed_successfully
@@ -148,7 +143,7 @@ services:
     build: ../../services/customerService
     profiles: ["order-customer", "all"]
     ports:
-      - "8082:9090"
+      - "127.0.0.1:${CUSTOMER_SERVICE_PORT:-8082}:9090"
     depends_on:
       kafka-init:
         condition: service_completed_successfully
@@ -167,7 +162,7 @@ services:
     build: ../../services/adminService
     profiles: ["notification-admin", "all"]
     ports:
-      - "8085:9090"
+      - "127.0.0.1:${ADMIN_SERVICE_PORT:-8085}:9090"
     depends_on:
       kafka-init:
         condition: service_completed_successfully
@@ -185,7 +180,7 @@ services:
     build: ../../services/notificationService
     profiles: ["notification-admin", "all"]
     ports:
-      - "8083:9090"
+      - "127.0.0.1:${NOTIFICATION_SERVICE_PORT:-8083}:9090"
     depends_on:
       kafka-init:
         condition: service_completed_successfully
@@ -202,11 +197,8 @@ services:
     networks: [backbone]
 
   notification-redis:
-    image: redis:7-alpine
+    image: redis:7.4-alpine
     profiles: ["notification-admin", "all"]
-    container_name: notification-redis
-    ports:
-      - "6381:6379"
     volumes:
       - notification-redis-data:/data
     healthcheck:
@@ -221,7 +213,7 @@ services:
     build: ../../services/paymentService
     profiles: ["restaurant-payment", "all"]
     ports:
-      - "8084:9090"
+      - "127.0.0.1:${PAYMENT_SERVICE_PORT:-8084}:9090"
     depends_on:
       kafka-init:
         condition: service_completed_successfully
@@ -241,7 +233,7 @@ services:
     build: ../../services/restaurantService
     profiles: ["restaurant-payment", "all"]
     ports:
-      - "8087:9090"
+      - "127.0.0.1:${RESTAURANT_SERVICE_PORT:-8087}:9090"
     depends_on:
       kafka-init:
         condition: service_completed_successfully
@@ -256,11 +248,8 @@ services:
     networks: [backbone]
 
   payment-redis:
-    image: redis:7-alpine
+    image: redis:7.4-alpine
     profiles: ["restaurant-payment", "all"]
-    container_name: payment-redis
-    ports:
-      - "6380:6379"
     volumes:
       - payment-redis-data:/data
     healthcheck:
@@ -275,12 +264,14 @@ services:
     build: ../../services/deliveryService
     profiles: ["delivery", "all"]
     ports:
-      - "8086:9090"
+      - "127.0.0.1:${DELIVERY_SERVICE_PORT:-8086}:9090"
     depends_on:
       kafka-init:
         condition: service_completed_successfully
       delivery-db:
         condition: service_healthy
+      delivery-db-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:9090/delivery/health || exit 1"]
       interval: 10s
@@ -291,15 +282,19 @@ services:
 
   # Wilgano
   order-db:
-    image: mongo:7
+    image: mongo:7.0
     profiles: ["order-customer", "all"]
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:?Set MONGO_ROOT_USER in .env}
       MONGO_INITDB_ROOT_PASSWORD: ${ORDER_DB_PASSWORD:?Set ORDER_DB_PASSWORD in .env}
+      MONGO_APP_USER: ${ORDER_DB_USER:-order_app}
+      MONGO_APP_PASSWORD: ${ORDER_DB_APP_PASSWORD:?Set ORDER_DB_APP_PASSWORD in .env}
+      MONGO_APP_DATABASE: ${ORDER_DB_NAME:-orders}
     ports:
-      - "${ORDER_DB_PORT:-27017}:27017"
+      - "127.0.0.1:${ORDER_DB_PORT:-27017}:27017"
     volumes:
       - "order-db-data:/data/db"
+      - ./initdb/order-db:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "mongosh --quiet -u \"$$MONGO_INITDB_ROOT_USERNAME\" -p \"$$MONGO_INITDB_ROOT_PASSWORD\" --authenticationDatabase admin --eval \"db.adminCommand('ping')\" || exit 1"]
       interval: 10s
@@ -309,16 +304,20 @@ services:
     networks: [backbone]
 
   customer-db:
-    image: mysql:8
+    image: mysql:8.4
     profiles: ["order-customer", "all"]
     environment:
       MYSQL_ROOT_PASSWORD: ${CUSTOMER_DB_PASSWORD:?Set CUSTOMER_DB_PASSWORD in .env}
+      MYSQL_DATABASE: ${CUSTOMER_DB_NAME:-customer}
+      MYSQL_USER: ${CUSTOMER_DB_USER:-customer_app}
+      MYSQL_PASSWORD: ${CUSTOMER_DB_APP_PASSWORD:?Set CUSTOMER_DB_APP_PASSWORD in .env}
     ports:
-      - "${CUSTOMER_DB_PORT:-1434}:3306"
+      - "127.0.0.1:${CUSTOMER_DB_PORT:-1434}:3306"
     volumes:
       - "customer-db-data:/var/lib/mysql"
+      - ./initdb/customer-db:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      test: ["CMD-SHELL", "mysql -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" -e 'SELECT 1' >/dev/null 2>&1 || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -327,16 +326,20 @@ services:
 
   # Emmanuel
   restaurant-db:
-    image: mysql:8
+    image: mysql:8.4
     profiles: ["restaurant-payment", "all"]
     environment:
       MYSQL_ROOT_PASSWORD: ${RESTAURANT_DB_PASSWORD:?Set RESTAURANT_DB_PASSWORD in .env}
+      MYSQL_DATABASE: ${RESTAURANT_DB_NAME:-restaurant}
+      MYSQL_USER: ${RESTAURANT_DB_USER:-restaurant_app}
+      MYSQL_PASSWORD: ${RESTAURANT_DB_APP_PASSWORD:?Set RESTAURANT_DB_APP_PASSWORD in .env}
     ports:
-      - "${RESTAURANT_DB_PORT:-1435}:3306"
+      - "127.0.0.1:${RESTAURANT_DB_PORT:-1435}:3306"
     volumes:
       - "restaurant-db-data:/var/lib/mysql"
+      - ./initdb/restaurant-db:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      test: ["CMD-SHELL", "mysql -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" -e 'SELECT 1' >/dev/null 2>&1 || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -344,16 +347,20 @@ services:
     networks: [backbone]
 
   payment-db:
-    image: mysql:8
+    image: mysql:8.4
     profiles: ["restaurant-payment", "all"]
     environment:
       MYSQL_ROOT_PASSWORD: ${PAYMENT_DB_PASSWORD:?Set PAYMENT_DB_PASSWORD in .env}
+      MYSQL_DATABASE: ${PAYMENT_DB_NAME:-payment}
+      MYSQL_USER: ${PAYMENT_DB_USER:-payment_app}
+      MYSQL_PASSWORD: ${PAYMENT_DB_APP_PASSWORD:?Set PAYMENT_DB_APP_PASSWORD in .env}
     ports:
-      - "${PAYMENT_DB_PORT:-1436}:3306"
+      - "127.0.0.1:${PAYMENT_DB_PORT:-1436}:3306"
     volumes:
       - "payment-db-data:/var/lib/mysql"
+      - ./initdb/payment-db:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      test: ["CMD-SHELL", "mysql -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" -e 'SELECT 1' >/dev/null 2>&1 || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -362,13 +369,13 @@ services:
 
   # Ikuaa
   delivery-db:
-    image: mcr.microsoft.com/mssql/server:2022-latest
+    image: mcr.microsoft.com/mssql/server:2022-CU26-ubuntu-22.04
     profiles: ["delivery", "all"]
     environment:
       ACCEPT_EULA: "Y"
       MSSQL_SA_PASSWORD: ${DELIVERY_DB_PASSWORD:?Set DELIVERY_DB_PASSWORD in .env}
     ports:
-      - "${DELIVERY_DB_PORT:-1437}:1433"
+      - "127.0.0.1:${DELIVERY_DB_PORT:-1437}:1433"
     volumes:
       - "delivery-db-data:/var/opt/mssql"
     healthcheck:
@@ -382,17 +389,33 @@ services:
       start_period: 45s
     networks: [backbone]
 
+  delivery-db-init:
+    image: mcr.microsoft.com/mssql/server:2022-CU26-ubuntu-22.04
+    profiles: ["delivery", "all"]
+    restart: "no"
+    depends_on:
+      delivery-db:
+        condition: service_healthy
+    environment:
+      SQLCMDPASSWORD: ${DELIVERY_DB_PASSWORD:?Set DELIVERY_DB_PASSWORD in .env}
+    command: ["/opt/mssql-tools18/bin/sqlcmd", "-S", "delivery-db", "-U", "sa", "-C", "-b", "-Q", "IF DB_ID('delivery') IS NULL CREATE DATABASE delivery;"]
+    networks: [backbone]
+
   # Sholm
   notification-db:
-    image: mongo:7
+    image: mongo:7.0
     profiles: ["notification-admin", "all"]
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:?Set MONGO_ROOT_USER in .env}
       MONGO_INITDB_ROOT_PASSWORD: ${NOTIFICATION_DB_PASSWORD:?Set NOTIFICATION_DB_PASSWORD in .env}
+      MONGO_APP_USER: ${NOTIFICATION_DB_USER:-notification_app}
+      MONGO_APP_PASSWORD: ${NOTIFICATION_DB_APP_PASSWORD:?Set NOTIFICATION_DB_APP_PASSWORD in .env}
+      MONGO_APP_DATABASE: ${NOTIFICATION_DB_NAME:-notifications}
     ports:
-      - "${NOTIFICATION_DB_PORT:-27018}:27017"
+      - "127.0.0.1:${NOTIFICATION_DB_PORT:-27018}:27017"
     volumes:
       - "notification-db-data:/data/db"
+      - ./initdb/notification-db:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "mongosh --quiet -u \"$$MONGO_INITDB_ROOT_USERNAME\" -p \"$$MONGO_INITDB_ROOT_PASSWORD\" --authenticationDatabase admin --eval \"db.adminCommand('ping')\" || exit 1"]
       interval: 10s
@@ -402,15 +425,19 @@ services:
     networks: [backbone]
 
   admin-db:
-    image: mongo:7
+    image: mongo:7.0
     profiles: ["notification-admin", "all"]
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:?Set MONGO_ROOT_USER in .env}
       MONGO_INITDB_ROOT_PASSWORD: ${ADMIN_DB_PASSWORD:?Set ADMIN_DB_PASSWORD in .env}
+      MONGO_APP_USER: ${ADMIN_DB_USER:-admin_app}
+      MONGO_APP_PASSWORD: ${ADMIN_DB_APP_PASSWORD:?Set ADMIN_DB_APP_PASSWORD in .env}
+      MONGO_APP_DATABASE: ${ADMIN_DB_NAME:-admin}
     ports:
-      - "${ADMIN_DB_PORT:-27019}:27017"
+      - "127.0.0.1:${ADMIN_DB_PORT:-27019}:27017"
     volumes:
       - "admin-db-data:/data/db"
+      - ./initdb/admin-db:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "mongosh --quiet -u \"$$MONGO_INITDB_ROOT_USERNAME\" -p \"$$MONGO_INITDB_ROOT_PASSWORD\" --authenticationDatabase admin --eval \"db.adminCommand('ping')\" || exit 1"]
       interval: 10s

@@ -22,12 +22,17 @@ param(
 )
 
 $DockerDir = Join-Path $PSScriptRoot ".."
-Set-Location -Path $DockerDir
+Push-Location -Path $DockerDir
+try {
+    docker info *> $null
+    if ($LASTEXITCODE -ne 0) { throw "Docker Desktop is not running." }
 
 if ($Profiles.Count -eq 0) {
-    docker compose start
+    $Profiles = @("all")
 }
-else {
-    $profileArgs = foreach ($p in $Profiles) { "--profile"; $p }
-    docker compose @profileArgs start
+$profileArgs = foreach ($p in $Profiles) { "--profile"; $p }
+docker compose @profileArgs start
+if ($LASTEXITCODE -ne 0) { throw "Docker Compose failed to start containers." }
+} finally {
+    Pop-Location
 }

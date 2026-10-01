@@ -8,6 +8,9 @@ scripts from that directory.
 ### Prerequisites
 
 - Docker Desktop must be installed and running.
+- Docker Compose v2.20 or newer.
+- Allocate enough Docker Desktop memory for the selected profile; measure the
+  full profile with `docker stats` and leave headroom above the observed peak.
 - PowerShell must allow local scripts. If execution is blocked, use the
   `RemoteSigned` policy for your user:
 
@@ -24,6 +27,7 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 From `Assignment-2/infra/docker`:
 
 ```powershell
+cd Assignment-2/infra/docker
 .\scripts\start-dev.ps1
 ```
 
@@ -42,14 +46,15 @@ Every profile also starts the shared `zookeeper`, `kafka`, `kafka-init`, and
 
 | Profile | Application services | Databases and supporting services |
 | --- | --- | --- |
-| `order-customer` | `order-service` (`8081:9090`), `customer-service` (`8082:9090`) | `order-db` (`1434:3306`), `customer-db` (`27017:27017`) |
-| `notification-admin` | `notification-service` (`8083:9090`), `admin-service` (`8085:9090`) | `notification-db` (`27018:27017`), `admin-db` (`27019:27017`), `notification-redis` (`6381:6379`) |
-| `restaurant-payment` | `restaurant-service` (`8087:9090`), `payment-service` (`8084:9090`) | `restaurant-db` (`1435:3306`), `payment-db` (`1436:3306`), `payment-redis` (`6380:6379`) |
+| `order-customer` | `order-service` (`8081:9090`), `customer-service` (`8082:9090`) | `order-db` (`27017:27017`), `customer-db` (`3307:3306`) |
+| `notification-admin` | `notification-service` (`8083:9090`), `admin-service` (`8085:9090`) | `notification-db` (`27018:27017`), `admin-db` (`27019:27017`), notification Redis (internal only) |
+| `restaurant-payment` | `restaurant-service` (`8087:9090`), `payment-service` (`8084:9090`) | `restaurant-db` (`3308:3306`), `payment-db` (`3309:3306`), payment Redis (internal only) |
 | `delivery` | `delivery-service` (`8086:9090`) | `delivery-db` (`1437:1433`) |
 | `all` | `order-service`, `customer-service`, `notification-service`, `admin-service`, `payment-service`, `restaurant-service`, `delivery-service` | `order-db`, `customer-db`, `notification-db`, `admin-db`, `restaurant-db`, `payment-db`, `delivery-db`, `notification-redis`, `payment-redis` |
 
-The shared services expose `gateway` on `8080`, Kafka on `9092` and `29092`,
-and ZooKeeper on `2181`.
+Host clients use `localhost:8080` for the gateway, `localhost:29092` for Kafka,
+and `localhost:2181` for ZooKeeper. Containers use `kafka:9092`; port 9092 is
+not published to the host.
 
 ## Starting and stopping without losing state
 
@@ -85,18 +90,20 @@ docker compose --profile all down
 
 Do not casually delete `.env` after real local data exists. Regenerating it
 creates new random passwords, but existing database volumes still contain the
-old credentials from their first initialization. MongoDB and MSSQL apply
+old credentials from their first initialization. MySQL, MongoDB, and MSSQL apply
 their initialization credentials only once, on an empty data directory. The
 result is an authentication failure that can look like a broken container
 (SCRAM mismatch for MongoDB or SQL login failure for MSSQL).
 
 To recover, delete only the affected named volume(s), then start the profile
 again so the database initializes with the regenerated password. The Compose
-project name is `Distributed-Food-Delivery-System`; for example:
+project name is `distributed_food_delivery_system`; prefer the reset script
+above instead of hard-coding volume names:
 
 ```powershell
 docker volume ls
-docker volume rm Distributed-Food-Delivery-System_customer-db-data
+docker volume ls --filter name=customer-db-data
+docker volume rm <name-from-docker-volume-ls>
 ```
 
 The volume names are declared at the bottom of `docker-compose.yml`
@@ -142,9 +149,9 @@ Current topics:
   `restaurant.ready`
 - `delivery.assigned`, `delivery.not_assigned`, `delivery.completed`,
   `delivery.cancelled`, `delivery.failed`
-- `orders.created.DLQ`, `payments.completed.DLQ`,
-  `restaurant.accepted.DLQ`, `restaurant.rejected.DLQ`,
-  `delivery.not_assigned.DLQ`, `delivery.assigned.DLQ`
+- Every base event topic has a lowercase `.dlq` companion. Keep the topic
+  contract in `kafka/create-topics.sh`; overlapping order/restaurant and
+  order/delivery events still require team ownership review.
 
 Add new topics to the `TOPICS` array in
 [`kafka/create-topics.sh`](kafka/create-topics.sh).
@@ -153,8 +160,8 @@ Add new topics to the `TOPICS` array in
 
 ### A database is `unhealthy` after `.env` was regenerated
 
-This is usually a stale volume/password mismatch. Existing MongoDB and MSSQL
-volumes retain the credentials from their first initialization. Follow the
+This is usually a stale volume/password mismatch. Existing MySQL, MongoDB, and
+MSSQL volumes retain the credentials from their first initialization. Follow the
 volume recovery steps above; do not keep deleting and regenerating `.env`
 without deleting the affected volume.
 

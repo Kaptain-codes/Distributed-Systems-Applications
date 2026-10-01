@@ -2,13 +2,22 @@
 # Pin working directory to infra/docker (where docker-compose.yml and .env
 # actually live), regardless of where this script is invoked from.
 $DockerDir = Join-Path $PSScriptRoot ".."
-Set-Location -Path $DockerDir
+Push-Location -Path $DockerDir
+try {
 
 $EnvFile = ".env"
 $ExampleFile = ".env.example"
 
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
     throw "Docker CLI was not found. Install Docker Desktop and try again."
+}
+docker info *> $null
+if ($LASTEXITCODE -ne 0) {
+    throw "Docker Desktop is installed but not running. Start it and retry."
+}
+docker compose version *> $null
+if ($LASTEXITCODE -ne 0) {
+    throw "Docker Compose v2 is required. Update Docker Desktop and retry."
 }
 
 # 1. Environment and Password Setup Lifecycle
@@ -24,6 +33,12 @@ if (-not (Test-Path $EnvFile)) {
     $CustomerDbPass     = "Dev_" + [Guid]::NewGuid().ToString("N").Substring(0,12) + "!"
     $NotificationDbPass = "Dev_" + [Guid]::NewGuid().ToString("N").Substring(0,12) + "!"
     $AdminDbPass        = "Dev_" + [Guid]::NewGuid().ToString("N").Substring(0,12) + "!"
+    $OrderDbAppPass     = "App_" + [Guid]::NewGuid().ToString("N").Substring(0,12) + "!"
+    $CustomerDbAppPass  = "App_" + [Guid]::NewGuid().ToString("N").Substring(0,12) + "!"
+    $RestaurantDbAppPass = "App_" + [Guid]::NewGuid().ToString("N").Substring(0,12) + "!"
+    $PaymentDbAppPass   = "App_" + [Guid]::NewGuid().ToString("N").Substring(0,12) + "!"
+    $NotificationDbAppPass = "App_" + [Guid]::NewGuid().ToString("N").Substring(0,12) + "!"
+    $AdminDbAppPass     = "App_" + [Guid]::NewGuid().ToString("N").Substring(0,12) + "!"
 
     Add-Content -Path $EnvFile -Value "`n# Dynamically Generated Local Container Passwords"
     Add-Content -Path $EnvFile -Value "ORDER_DB_PASSWORD=$OrderDbPass"
@@ -33,8 +48,30 @@ if (-not (Test-Path $EnvFile)) {
     Add-Content -Path $EnvFile -Value "CUSTOMER_DB_PASSWORD=$CustomerDbPass"
     Add-Content -Path $EnvFile -Value "NOTIFICATION_DB_PASSWORD=$NotificationDbPass"
     Add-Content -Path $EnvFile -Value "ADMIN_DB_PASSWORD=$AdminDbPass"
+    Add-Content -Path $EnvFile -Value "ORDER_DB_APP_PASSWORD=$OrderDbAppPass"
+    Add-Content -Path $EnvFile -Value "CUSTOMER_DB_APP_PASSWORD=$CustomerDbAppPass"
+    Add-Content -Path $EnvFile -Value "RESTAURANT_DB_APP_PASSWORD=$RestaurantDbAppPass"
+    Add-Content -Path $EnvFile -Value "PAYMENT_DB_APP_PASSWORD=$PaymentDbAppPass"
+    Add-Content -Path $EnvFile -Value "NOTIFICATION_DB_APP_PASSWORD=$NotificationDbAppPass"
+    Add-Content -Path $EnvFile -Value "ADMIN_DB_APP_PASSWORD=$AdminDbAppPass"
 
     Write-Host "Unique environment file initialized!" -ForegroundColor Green
+} else {
+    Write-Host "Using existing .env (delete it only together with the DB volumes)." -ForegroundColor DarkGray
+    $appPasswordKeys = @(
+        "ORDER_DB_APP_PASSWORD",
+        "CUSTOMER_DB_APP_PASSWORD",
+        "RESTAURANT_DB_APP_PASSWORD",
+        "PAYMENT_DB_APP_PASSWORD",
+        "NOTIFICATION_DB_APP_PASSWORD",
+        "ADMIN_DB_APP_PASSWORD"
+    )
+    foreach ($key in $appPasswordKeys) {
+        if (-not (Select-String -Path $EnvFile -Pattern ("^" + $key + "=") -Quiet)) {
+            $value = "App_" + [Guid]::NewGuid().ToString("N").Substring(0,12) + "!"
+            Add-Content -Path $EnvFile -Value ($key + "=" + $value)
+        }
+    }
 }
 
 # 2. Scope of Work Profile Menu Selector
@@ -65,23 +102,18 @@ if (-not $Profiles.ContainsKey($Choice)) {
     Write-Host "Selection aborted: choose a number from 1 to 5." -ForegroundColor Red
     exit 1
 }
-# Simple check for the .env file existence, but do not overwrite it if it exists. This is to avoid losing any manually set passwords or configurations.
-if (-not (Test-Path $EnvFile)) {
-    Write-Host "Local .env configuration missing. Building clean file..." -ForegroundColor Cyan
-    ...
-} else {
-    Write-Host "Using existing .env - delete it manually if you want fresh passwords (this will require wiping DB volumes too)." -ForegroundColor DarkGray
-}
-
 $TargetProfile = $Profiles[$Choice]
 
 # 3. Execution Engine
 Write-Host "`nStarting '$TargetProfile' profile containers..." -ForegroundColor Green
-docker compose --profile $TargetProfile up -d
+docker compose --profile $TargetProfile up -d --build
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "`nDevelopment containers are running for '$TargetProfile'." -ForegroundColor Green
 } else {
     Write-Host "`nDocker Compose failed - check the error above." -ForegroundColor Red
     exit $LASTEXITCODE
+}
+} finally {
+    Pop-Location
 }
