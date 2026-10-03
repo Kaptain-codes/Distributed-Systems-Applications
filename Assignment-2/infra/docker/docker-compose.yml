@@ -142,6 +142,12 @@ services:
     # some earlier scaffolding/naming referring to it as "user service".
     build: ../../services/customerService
     profiles: ["order-customer", "all"]
+    environment:
+      CUSTOMER_DB_HOST: customer-db
+      CUSTOMER_DB_PORT: 3306
+      CUSTOMER_DB_NAME: ${CUSTOMER_DB_NAME:-customer}
+      CUSTOMER_DB_USER: ${CUSTOMER_DB_USER:-customer_app}
+      CUSTOMER_DB_PASSWORD: ${CUSTOMER_DB_APP_PASSWORD}
     ports:
       - "127.0.0.1:${CUSTOMER_SERVICE_PORT:-8082}:9090"
     depends_on:
