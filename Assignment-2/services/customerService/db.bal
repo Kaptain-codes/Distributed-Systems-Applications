@@ -36,7 +36,7 @@ public type NewCustomer record {|
 
 public isolated function customerExists(string customerId) returns boolean|error {
     int count = check customerDb->queryRow(`
-    SELECT COUNT(*) AS cnt FROM customer WHERE id = ${customerId}`);
-
+        SELECT COUNT(*) AS cnt FROM customers WHERE id = ${customerId}
+    `);
     return count > 0;
 }

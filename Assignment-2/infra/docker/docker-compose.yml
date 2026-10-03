@@ -122,6 +122,14 @@ services:
   order-service:
     build: ../../services/orderService
     profiles: ["order-customer", "all"]
+    environment:
+      ORDER_DB_HOST: order-db
+      ORDER_DB_PORT: 27017
+      ORDER_DB_NAME: ${ORDER_DB_NAME:-orders}
+      ORDER_DB_USER: ${ORDER_DB_USER:-order_app}
+      ORDER_DB_PASSWORD: ${ORDER_DB_APP_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      CUSTOMER_SERVICE_URL: http://customer-service:9090
     ports:
       - "127.0.0.1:${ORDER_SERVICE_PORT:-8081}:9090"
     depends_on:

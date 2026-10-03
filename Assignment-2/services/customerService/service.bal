@@ -12,37 +12,37 @@ service /customer on new http:Listener(9090) {
     resource function get health() returns json {
         return {status: "UP", 'service: "customer"};
     }
+
     // resource function get orders() returns http:Ok {
     //     orderClient->get
     // }
 
     resource function post .(http:Caller caller, http:Request req) returns error? {
-    json body = check req.getJsonPayload();
-    NewCustomer payload = check body.cloneWithType();
+        json body = check req.getJsonPayload();
+        NewCustomer payload = check body.cloneWithType();
 
-    string id = uuid:createType1AsString();
-    _ = check customerDb->execute(`
+        string id = uuid:createType1AsString();
+        _ = check customerDb->execute(`
         INSERT INTO customers (id, name, email, phone)
-        VALUES (${id}, ${payload.name}, ${payload.email}, ${payload.phone})
-    `);
-
-    http:Response res = new;
-    res.statusCode = 201;
-    res.setJsonPayload({id, name: payload.name, email: payload.email, phone: payload.phone});
-    check caller->respond(res);
-}
-
-    resource function get [string id](http:Caller caller) returns error? {
-        Customer|sql:Error customer = check customerDb->queryRow(`
-        SELECT id, name, email, phone FROM customers WHERE id = ${id}`);
+        VALUES (${id}, ${payload.name}, ${payload.email}, ${payload.phone})`);
 
         http:Response res = new;
-        if customer is sql:Error {
+        res.statusCode = 201;
+        res.setJsonPayload({id, name: payload.name, email: payload.email, phone: payload.phone});
+        check caller->respond(res);
+    }
+
+    resource function get [string id](http:Caller caller) returns error? {
+        http:Response res = new;
+        Customer|sql:Error result = customerDb->queryRow(`
+            SELECT id, name, email, phone FROM customers WHERE id = ${id}
+        `);
+        if result is sql:Error {
             res.statusCode = 404;
-            res.setJsonPayload({message: string `customer with id ${id} not found`});
+            res.setJsonPayload({message: string `customer ${id} not found`});
         } else {
             res.statusCode = 200;
-            res.setJsonPayload(customer);
+            res.setJsonPayload(result);
         }
         check caller->respond(res);
     }

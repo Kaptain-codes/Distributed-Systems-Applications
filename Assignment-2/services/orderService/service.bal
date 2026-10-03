@@ -1,44 +1,112 @@
 import ballerina/http;
-// import ballerinax/kafka;
+import ballerina/time;
+import ballerina/uuid;
 
-# A service representing a network-accessible API
-# bound to port `9090`.
-# NOTE: 'order' is a reserved word in Ballerina (used in query expressions'
-# order by clause) — escaped with a leading ' to use it as an identifier.
 service /'order on new http:Listener(9090) {
 
     resource function get health() returns json {
         return {status: "UP", 'service: "order"};
-     }
-    // resource function get orders() returns json {
-    //     kafka:Consumer kafkaConsumer = new({
-    //         bootstrapServers: "localhost:9092",
-    //         groupId: "order-service-group",
-    //         topics: ["orders"]
-    //     });
-    //     json[] orders = [];
-    //     var result = kafkaConsumer->poll();
-    //     if (result is kafka:ConsumerRecord[]) {
-    //         foreach var record in result {
-    //             orders.push(record.value);  
-    //         }
-    //     }
-    //     return {orders: orders};
-    // }
+    }
 
-    // resource function post orders(http:Caller caller, http:Request req) returns error? {
-    //     json 'order = check req.getJsonPayload();
-    //     kafka:Producer kafkaProducer = new({
-    //         bootstrapServers: "localhost:9092"
-    //     });
-    //     var result = kafkaProducer->send({
-    //         topic: "orders",
-    //         value: 'order
-    //     });
-    //     if (result is kafka:Error) {
-    //         return caller->respond("Failed to send order to Kafka");
-    //     }
-    //     return caller->respond("Order sent to Kafka successfully");
-    // }
+    resource function post .(http:Caller caller, http:Request req) returns error? {
+        json body = check req.getJsonPayload();
+        CreateOrderRequest payload = check body.cloneWithType();
+        http:Response res = new;
 
+        boolean ok = check customerExists(payload.customerId);
+        if !ok {
+            res.statusCode = 400;
+            res.setJsonPayload({message: string `customer ${payload.customerId} not found`});
+            check caller->respond(res);
+            return;
+        }
+
+        decimal total = 0;
+        foreach OrderItem item in payload.items {
+            total += <decimal>item.quantity * item.price;
+        }
+
+        string id = uuid:createType1AsString();
+        string now = time:utcToString(time:utcNow());
+        Order newOrder = {
+            id,
+            customerId: payload.customerId,
+            restaurantId: payload.restaurantId,
+            items: payload.items,
+            total,
+            status: "CREATED",
+            createdAt: now,
+            updatedAt: now
+        };
+
+        _ = check orderCollection->insertOne(newOrder);
+        check publishStatusEvent(newOrder);
+
+        res.statusCode = 201;
+        res.setJsonPayload(newOrder.toJson());
+        check caller->respond(res);
+    }
+
+    resource function get [string id](http:Caller caller) returns error? {
+        map<json> filter = {"id": {"$eq": id}};
+        Order? result = check orderCollection->findOne(filter);
+        http:Response res = new;
+
+        if result is () {
+            res.statusCode = 404;
+            res.setJsonPayload({message: string `order ${id} not found`});
+        } else {
+            res.statusCode = 200;
+            res.setJsonPayload(result.toJson());
+        }
+        check caller->respond(res);
+    }
+
+    resource function put [string id]/status(http:Caller caller, http:Request req) returns error? {
+        json body = check req.getJsonPayload();
+        UpdateOrderStatusRequest payload = check body.cloneWithType();
+        http:Response res = new;
+
+        map<json> filter = {"id": {"$eq": id}};
+
+        Order? existing = check orderCollection->findOne(filter);
+        if existing is () {
+            res.statusCode = 404;
+            res.setJsonPayload({message: string `order ${id} not found`});
+            check caller->respond(res);
+            return;
+        }
+
+        Order ord = existing;
+        OrderStatus current = ord.status;
+
+        if !isValidTransition(current, payload.status) {
+            res.statusCode = 409;
+            res.setJsonPayload({
+                message: string `invalid transition ${current} -> ${payload.status}`
+            });
+            check caller->respond(res);
+            return;
+        }
+
+        string now = time:utcToString(time:utcNow());
+        Order updated = {
+            id: ord.id,
+            customerId: ord.customerId,
+            restaurantId: ord.restaurantId,
+            items: ord.items,
+            total: ord.total,
+            status: payload.status,
+            createdAt: ord.createdAt,
+            updatedAt: now
+        };
+
+        _ = check orderCollection->deleteOne(filter);
+        _ = check orderCollection->insertOne(updated);
+        check publishStatusEvent(updated);
+
+        res.statusCode = 200;
+        res.setJsonPayload(updated.toJson());
+        check caller->respond(res);
+    }
 }
