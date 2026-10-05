@@ -1,6 +1,6 @@
 # Web UI Debug Report
 
-Date: 2026-10-05  
+Date: 2026-10-05
 Scope: `Assignment-2/client` against the Assignment 2 Docker Compose backend.
 
 ## Environment and startup
@@ -10,40 +10,37 @@ Scope: `Assignment-2/client` against the Assignment 2 Docker Compose backend.
 | Static UI syntax | PASS | `node --check client/app.js` exited 0 |
 | Repository diff whitespace | PASS | `git diff --check -- Assignment-2/client` exited 0 |
 | Docker backend startup | PASS with one unhealthy service | Gateway, customer, restaurant, payment, delivery, notification, Kafka, and databases were running |
-| Static server | PASS | UI loaded from `http://localhost:5502/` |
-| Ballerina runtime | PASS | Ballerina 2201.13.4 detected during setup |
-| Node runtime | PASS | Node.js v24.16.0 detected during setup |
+| Static server | PASS | UI loaded from `http://localhost:5500/` |
+| Ballerina runtime | PASS | Ballerina 2201.13.4 |
+| Node runtime | PASS | Node.js v24.16.0 |
 
-The Compose file maps the gateway to port `8080`, while the UI specification
-default is port `9090`. Tests used `http://localhost:8080/api` through a
-same-origin development proxy at `http://localhost:5502/api`.
+Compose maps the gateway to port `8080`; the UI specification default is
+`9090`. Tests used `http://localhost:8080/api`.
 
 ## API and browser test matrix
 
 | Test | Result | Notes |
 |---|---|---|
-| Load UI structure and six tabs | PASS | Catalog, My orders, Track, Notifications, Simulator, and Settings rendered |
+| Load UI structure and six tabs | PASS | All required panels rendered |
 | Gateway health | PASS | `GET /api/health` returned 200 |
-| Restaurant catalog | PASS | `GET /api/restaurant/restaurants` returned 200 and rendered Demo Restaurant |
-| Menu loading | PASS | `GET /api/restaurant/restaurants/{id}/menu` returned 200 and rendered Demo item |
-| Stored customer validation | PASS | `GET /api/customer/customers/cus-1` returned 200 |
-| Address loading | PASS | `GET /api/customer/customers/cus-1/addresses` returned 200 |
-| Customer registration | PASS | `POST /api/customer/customers` returned 201 and returned `cus-1` |
-| Address registration with locked UI payload | BLOCKED by backend | Returned 400; see contract mismatch below |
-| Orders list | PASS, slow | `GET /api/order/orders?customerId=cus-1` returned 200 after about 32 seconds |
-| Notifications | PASS | Repeated `GET /api/notification/notifications?recipientId=cus-1` returned 200 |
-| Wrong base URL handling | PASS | UI showed the unreachable/CORS banner rather than a blank page |
-| Cross-origin browser request | EXPECTED BLOCK | Gateway did not return `Access-Control-Allow-Origin`; UI surfaced the exact CORS/unreachable message |
-| Same-origin proxy request | PASS | UI connected and rendered backend data |
-| Responsive/static rendering | PASS | Browser loaded the stylesheet and panel layout without script errors |
-| ID safety checks | PASS | No `Math.random()`, no entity ID fabrication, and `crypto.randomUUID()` is limited to idempotency headers |
-| HTML safety checks | PASS | No `innerHTML`; server values are rendered through DOM nodes/textContent |
+| Restaurant catalog | PASS | Restaurant data rendered |
+| Menu loading | PASS | Menu data rendered |
+| Stored customer validation | PASS | Existing server-issued ID validated |
+| Address loading | PASS | Address endpoint returned 200 |
+| Customer registration | PASS | `POST /customer/customers` returned 201 |
+| Address registration with locked UI payload | PASS after backend fix | Returned 201 with server-generated `addr-1` |
+| Orders list | PASS, slow | Returned 200 after delayed order-service response |
+| Notifications | PASS | Notification polling returned 200 |
+| Cross-origin browser request | PASS after gateway fix | CORS headers returned for local UI origins |
+| Wrong base URL handling | PASS | UI displayed the unreachable/CORS banner |
+| ID safety checks | PASS | No fabricated entity IDs or `Math.random()` |
+| HTML safety checks | PASS | No `innerHTML`; server values use DOM text APIs |
 
-## Defects found and resolution
+## Fixes applied
 
-### 1. Address contract mismatch (backend blocker)
+### Address contract mismatch — resolved
 
-The required `buildAddressPayload()` sends:
+The original customer service rejected the locked UI payload:
 
 ```json
 {
@@ -55,66 +52,51 @@ The required `buildAddressPayload()` sends:
 }
 ```
 
-The live customer service returned:
+It returned:
 
 ```json
 {
-  "timestamp": "2026-10-05T20:46:41.240458205Z",
   "status": 400,
   "reason": "Bad Request",
-  "message": "data binding failed: undefined field 'label'",
-  "path": "/customer/customers/cus-1/addresses",
-  "method": "POST"
+  "message": "data binding failed: undefined field 'label'"
 }
 ```
 
-The service source defines `AddressInput` with `line1`, `city`, `country`, and
-optional `postalCode`; it does not accept `label`, `region`, or `is_default`.
-The UI was not changed to send a different body because `ui.md` explicitly
-locks this request builder and says that specification wins.
+The customer service was updated to accept `label`, `region`, and `is_default`
+while retaining compatibility with `country` and `postalCode`. When `country`
+is omitted, `region` is used as the country fallback. The response preserves
+the UI address fields.
 
-The frontend fix was to complete the required partial-failure behavior:
-customer ID remains persisted, address fields are cleared, and a blocking
-contract/error sheet now exposes the raw JSON with copy, Retry (address-only),
-and Cancel actions. Retrying cannot create a second customer.
+The service compiled successfully, was rebuilt, and was restarted. A fresh
+through-gateway verification returned:
 
-**Backend action required:** align the customer-service address input contract
-with `ui.md`, or update the authoritative UI contract before attempting the
-full order journey.
+```text
+POST /api/customer/customers -> 201
+POST /api/customer/customers/cus-1/addresses -> 201
+```
 
-### 2. Order service health/readiness
+The frontend’s partial-failure handling remains as a defensive safeguard:
+customer identity stays persisted and retry performs address-only registration.
 
-`distributed_food_delivery_system-order-service-1` remained unhealthy.
-`GET http://localhost:8081/order/health` timed out, and the gateway restaurant
-or order calls were intermittently delayed. Container logs only showed the
-Kafka consumer starting; no successful health response was observed.
+### Gateway CORS — resolved
 
-This is an infrastructure/service readiness issue, not a frontend change. The
-UI correctly keeps loading/error feedback visible and does not pretend an
-order was created.
+The gateway now allows local development origins:
 
-### 3. Gateway CORS
+- `http://localhost:5500`
+- `http://localhost:5502`
+- `http://127.0.0.1:5500`
+- `http://127.0.0.1:5502`
 
-Direct browser calls from the static server origin to `localhost:8080` failed
-preflight because the gateway did not emit `Access-Control-Allow-Origin`.
-The UI correctly displayed:
+Preflight verification returned `204 No Content` with the expected
+`Access-Control-Allow-Origin`, `Access-Control-Allow-Methods`, and
+`Access-Control-Allow-Headers` values. Normal `GET /api/health` responses also
+include `Access-Control-Allow-Origin`.
 
-> Cannot reach {url}. Likely: gateway down, CORS, or wrong base URL.
+## Remaining blocker
 
-The same-origin proxy proved the frontend can consume the JSON responses when
-the browser is not blocked by CORS. Production use should either configure
-gateway CORS or serve the static UI from the gateway origin.
-
-## Additional behavioral checks
-
-- Customer identity persisted as the server-returned `cus-1`; reload validation
-  reused it instead of registering another customer.
-- Restaurant and menu IDs were taken from API responses.
-- Notifications updated the unread stat and sidebar badge.
-- Debug settings showed request method, URL, status, and elapsed time.
-- The Track, Simulator, and Settings panels remained reachable even when the
-  order service was unavailable.
-- No endpoint outside the `ui.md` allow-list was added.
+The order service remains unhealthy. Its `/order/health` endpoint timed out
+during testing, and order operations were intermittently delayed. This is a
+backend service-readiness issue, not a frontend or CORS issue.
 
 ## Final verdict
 
@@ -123,8 +105,8 @@ gateway CORS or serve the static UI from the gateway origin.
 | Static startup | PASS |
 | JavaScript syntax and safety constraints | PASS |
 | Catalog integration | PASS |
-| Identity integration | PARTIAL: customer pass, address blocked by backend contract |
-| Order end-to-end journey | BLOCKED by unhealthy order service and address contract |
-| Direct cross-origin deployment | BLOCKED until gateway CORS is configured |
-| Overall | NOT READY for full Definition of Done until backend blockers are resolved |
+| Identity integration | PASS: customer and address registration verified |
+| Direct cross-origin deployment | PASS for configured local origins |
+| Full order end-to-end journey | BLOCKED by unhealthy order service |
+| Overall | NOT READY for full Definition of Done until order service health is resolved |
 

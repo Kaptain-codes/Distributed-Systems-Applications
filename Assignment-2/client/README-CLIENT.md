@@ -11,18 +11,16 @@ From this directory, with the gateway running:
 
 ```powershell
 bal run
-bal run -- whoami
-bal run -- restaurants
-bal run -- menu --restaurant <server-issued-id>
-bal run -- place --restaurant <id> --item <server-issued-menu-item-id> --qty 1
-bal run -- track --once
 ```
+
+The client opens a simple numbered menu, matching the Assignment 1 clients.
+Choose an option and answer the prompts for restaurant, menu item, order, or
+driver values. Use `0` to exit.
 
 Use `Config.toml` or environment-backed Ballerina configuration to override
 `baseUrl`, `pollMs`, `autoRegister`, and the HTTP settings. Kafka consumption
-is intentionally disabled by default; the current `track` feed is inferred
-from API polling. The client has no authentication and does not use TLS,
-matching the backend contract.
+is intentionally disabled by default; tracking uses API polling. The client
+has no authentication and does not use TLS, matching the backend contract.
 
-`simulate kitchen ...` and `simulate driver ...` are demo harness commands,
-not replacement backend services.
+The kitchen and driver options are demo harness actions, not replacement
+backend services.

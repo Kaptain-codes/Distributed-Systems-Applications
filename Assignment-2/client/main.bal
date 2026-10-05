@@ -1,6 +1,5 @@
 import ballerina/io;
 import ballerina/lang.runtime;
-import ballerina/log;
 
 public function main(string... args) returns error? {
     ClientState state = loadState();
@@ -8,36 +7,148 @@ public function main(string... args) returns error? {
         state.baseUrl = baseUrl;
         state.pollMs = pollMs;
     }
-    if args.length() == 0 {
-        printUsage();
-        return;
+    boolean running = true;
+    while running {
+        io:println();
+        io:println("=== Food Delivery Client ===");
+        io:println("1. Register / show customer");
+        io:println("2. List restaurants");
+        io:println("3. Show restaurant menu");
+        io:println("4. Place order");
+        io:println("5. Track active order");
+        io:println("6. List my orders");
+        io:println("7. Simulate kitchen");
+        io:println("8. Simulate driver");
+        io:println("9. Cancel active order");
+        io:println("0. Exit");
+        io:print("Choose an option: ");
+
+        string choice = io:readln().trim();
+        error? result = ();
+        match choice {
+            "1" => { result = resolveIdentity(state); }
+            "2" => { result = listRestaurants([]); }
+            "3" => { result = showMenuInteractive(); }
+            "4" => { result = placeOrderInteractive(state); }
+            "5" => { result = trackOrder(state, ["track"]); }
+            "6" => { result = listOrders(state); }
+            "7" => { result = simulateKitchenInteractive(); }
+            "8" => { result = simulateDriverInteractive(); }
+            "9" => { result = cancelOrder(state); }
+            "0" => { running = false; }
+            _ => { io:println("Invalid option."); }
+        }
+        if result is error {
+            printError(result);
+        }
     }
-    string command = args[0];
-    if command == "whoami" {
-        check resolveIdentity(state);
-    } else if command == "restaurants" {
-        check listRestaurants(args);
-    } else if command == "menu" {
-        check listMenu(args);
-    } else if command == "place" {
-        check placeOrder(state, args);
-    } else if command == "track" {
-        check trackOrder(state, args);
-    } else if command == "orders" {
-        check listOrders(state);
-    } else if command == "notifications" {
-        check listNotifications(state);
-    } else if command == "cancel" {
-        check cancelOrder(state);
-    } else if command == "settings" {
-        check settings(state, args);
-    } else if command == "simulate" {
-        check simulate(state, args);
-    } else if command == "auto-drive" {
-        check autoDrive(state, args);
-    } else {
-        printUsage();
+}
+
+function printError(error err) {
+    io:println("Operation failed: ", err.message());
+}
+
+function showMenuInteractive() returns error? {
+    io:print("Restaurant ID: ");
+    string restaurantId = io:readln().trim();
+    if restaurantId == "" {
+        return error("restaurant ID is required");
     }
+    return listMenu(["menu", "--restaurant", restaurantId]);
+}
+
+function placeOrderInteractive(ClientState state) returns error? {
+    check resolveIdentity(state);
+    io:print("Restaurant ID: ");
+    string restaurantId = io:readln().trim();
+    io:print("Menu item ID: ");
+    string menuItemId = io:readln().trim();
+    io:print("Quantity: ");
+    string quantity = io:readln().trim();
+    io:print("Address ID (blank uses saved address): ");
+    string addressId = io:readln().trim();
+    io:print("Payment method (SIM_OK/SIM_DECLINE): ");
+    string payment = io:readln().trim();
+    if payment == "" {
+        payment = "SIM_OK";
+    }
+    string[] command = ["place", "--restaurant", restaurantId, "--item", menuItemId,
+        "--qty", quantity, "--payment", payment];
+    if addressId != "" {
+        command.push("--address");
+        command.push(addressId);
+    }
+    return placeOrder(state, command);
+}
+
+function simulateKitchenInteractive() returns error? {
+    io:print("Order ID: ");
+    string orderId = io:readln().trim();
+    io:println("1. Accept");
+    io:println("2. Reject");
+    io:println("3. Preparing");
+    io:println("4. Ready");
+    io:print("Kitchen action: ");
+    string choice = io:readln().trim();
+    string action = "";
+    if choice == "1" {
+        action = "accept";
+    } else if choice == "2" {
+        action = "reject";
+    } else if choice == "3" {
+        action = "preparing";
+    } else if choice == "4" {
+        action = "ready";
+    }
+    if action == "" {
+        return error("invalid kitchen action");
+    }
+    string[] command = ["simulate", "kitchen", action, "--order", orderId];
+    if action == "reject" {
+        io:print("Reason: ");
+        command.push("--reason");
+        command.push(io:readln().trim());
+    }
+    return simulate({}, command);
+}
+
+function simulateDriverInteractive() returns error? {
+    io:println("1. Register driver");
+    io:println("2. Set driver status");
+    io:println("3. Pickup order");
+    io:println("4. Complete order");
+    io:println("5. Fail delivery");
+    io:print("Driver action: ");
+    string choice = io:readln().trim();
+    if choice == "1" {
+        io:print("Driver name: ");
+        string name = io:readln().trim();
+        io:print("Driver phone: ");
+        string phone = io:readln().trim();
+        return simulate({}, ["simulate", "driver", "register", "--name", name, "--phone", phone]);
+    }
+    io:print("Order ID: ");
+    string orderId = io:readln().trim();
+    io:print("Driver ID: ");
+    string driverId = io:readln().trim();
+    string action = "";
+    if choice == "3" {
+        action = "pickup";
+    } else if choice == "4" {
+        action = "complete";
+    } else if choice == "5" {
+        action = "fail";
+    }
+    if action == "" {
+        return error("invalid driver action");
+    }
+    string[] command = ["simulate", "driver", action, "--order", orderId, "--driver", driverId];
+    if action == "fail" {
+        io:print("Failure reason: ");
+        command.push("--reason");
+        command.push(io:readln().trim());
+    }
+    return simulate({}, command);
 }
 
 function resolveIdentity(ClientState state) returns error? {
@@ -254,15 +365,15 @@ function hasFlag(string[] args, string flag) returns boolean {
         if arg == flag {
             return true;
         }
-
-        function requireString(string? value) returns string|error {
-            if value is string {
-                return value;
-            }
-            return error("required value is missing");
-        }
     }
     return false;
+}
+
+function requireString(string? value) returns string|error {
+    if value is string {
+        return value;
+    }
+    return error("required value is missing");
 }
 
 function printUsage() {

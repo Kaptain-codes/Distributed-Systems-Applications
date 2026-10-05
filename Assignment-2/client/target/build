@@ -1,15 +1,15 @@
 {
-  "last_build_time": 1791229393486,
-  "last_update_time": 1791229393486,
-  "last_bal_toml_update_time": 1791229219475,
+  "last_build_time": 1791235658184,
+  "last_update_time": 1791235658184,
+  "last_bal_toml_update_time": 1791232967880,
   "distribution_version": "2201.13.4",
   "last_modified_time": {
-    "foodDeliveryClient": 1791229357322
+    "foodDeliveryClient": 1791235570365
   },
   "last_build_options": {
+    "skipTests": false,
     "compilationOptions": {
       "observabilityIncluded": true,
-      "dumpBir": false,
       "cloud": "",
       "dumpGraph": false,
       "dumpRawGraphs": false
@@ -17,24 +17,56 @@
   },
   "src_meta_info": [
     {
-      "file": "C:\\Users\\wykva\\IdeaProjects\\Distributed-Systems-Applications\\Assignment-2\\client\\Ballerina.toml",
-      "hash": "fdebdd4658a277141274453c850ecb481410b44b0185a4c1b6b15a1a467b4b1e",
-      "size": 159,
-      "lastModifiedTime": 1791229219475
+      "file": "C:\\Users\\wykva\\IdeaProjects\\Distributed-Systems-Applications\\Assignment-2\\client\\api.bal",
+      "hash": "d6c7c00626ad3339d3402eaa92351b8fd3ebf1426e7ef11f996ab1349e596d0f",
+      "size": 3783,
+      "lastModifiedTime": 1791233431376
     },
     {
-      "file": "C:\\Users\\wykva\\IdeaProjects\\Distributed-Systems-Applications\\Assignment-2\\client\\client.bal",
-      "hash": "026d72b4a31c6a58d5374d6fac64b540920a5473ef65d5de58f327d22146096a",
-      "size": 6173,
-      "lastModifiedTime": 1791229357322
+      "file": "C:\\Users\\wykva\\IdeaProjects\\Distributed-Systems-Applications\\Assignment-2\\client\\Ballerina.toml",
+      "hash": "084bdc0e10fd365ad550621f7394450f64b505f23a0953156bd52f14db187cd7",
+      "size": 157,
+      "lastModifiedTime": 1791232967880
+    },
+    {
+      "file": "C:\\Users\\wykva\\IdeaProjects\\Distributed-Systems-Applications\\Assignment-2\\client\\config.bal",
+      "hash": "edbd6df6fa21b860907ee1eca6159881d1bf2ecaf7619ebc324a783427c6944f",
+      "size": 779,
+      "lastModifiedTime": 1791232967901
+    },
+    {
+      "file": "C:\\Users\\wykva\\IdeaProjects\\Distributed-Systems-Applications\\Assignment-2\\client\\main.bal",
+      "hash": "60f141af7bc0cf5f657809a0d1e9e140205e49d8b1626e3e4ba2e8d2a9f46460",
+      "size": 14902,
+      "lastModifiedTime": 1791235570365
+    },
+    {
+      "file": "C:\\Users\\wykva\\IdeaProjects\\Distributed-Systems-Applications\\Assignment-2\\client\\render.bal",
+      "hash": "98b32ffa6a9d92dfb595dc2f115c9f119191845067c2636782cf27a668b59cba",
+      "size": 1544,
+      "lastModifiedTime": 1791233117531
+    },
+    {
+      "file": "C:\\Users\\wykva\\IdeaProjects\\Distributed-Systems-Applications\\Assignment-2\\client\\state.bal",
+      "hash": "766167d5fdd0b01f80f1dc5c8ad234502011e48433a0d055fb2b492e14885d52",
+      "size": 1191,
+      "lastModifiedTime": 1791233600647
+    },
+    {
+      "file": "C:\\Users\\wykva\\IdeaProjects\\Distributed-Systems-Applications\\Assignment-2\\client\\types.bal",
+      "hash": "82f23f9f80cf823a57a829b843f67c5955bb2f9abb584bf5e808b11961f31a23",
+      "size": 504,
+      "lastModifiedTime": 1791232967915
     }
   ],
-  "target_exec_meta_info": {
-    "file": "C:\\Users\\wykva\\IdeaProjects\\Distributed-Systems-Applications\\Assignment-2\\client\\target\\backup\\bin\\foodDeliveryClient.jar",
-    "hash": "b10cfe27db36a075551ba2e7a9c51f213ae0b71b995b5a90c8a05c1861669ad9",
-    "size": 49073539,
-    "lastModifiedTime": 1791229398124
-  },
+  "test_src_meta_info": [
+    {
+      "file": "C:\\Users\\wykva\\IdeaProjects\\Distributed-Systems-Applications\\Assignment-2\\client\\tests\\client_test.bal",
+      "hash": "923a5abac4da78ae227ba7180353b484a689e98ed26fc7f62c67cc8451a40ae3",
+      "size": 956,
+      "lastModifiedTime": 1791233493090
+    }
+  ],
   "settings_meta_info": {
     "file": "C:\\Users\\wykva\\.ballerina\\Settings.toml",
     "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -43,12 +75,39 @@
   },
   "ballerina_toml_meta_info": {
     "file": "C:\\Users\\wykva\\IdeaProjects\\Distributed-Systems-Applications\\Assignment-2\\client\\Ballerina.toml",
-    "hash": "fdebdd4658a277141274453c850ecb481410b44b0185a4c1b6b15a1a467b4b1e",
-    "size": 159,
-    "lastModifiedTime": 1791229219475
+    "hash": "084bdc0e10fd365ad550621f7394450f64b505f23a0953156bd52f14db187cd7",
+    "size": 157,
+    "lastModifiedTime": 1791232967880
   },
+  "test_artifact_meta_info": [
+    {
+      "file": "C:\\Users\\wykva\\IdeaProjects\\Distributed-Systems-Applications\\Assignment-2\\client\\target\\backup\\cache\\tests_cache\\test_suit.json",
+      "hash": "266c3ae004acbf4cd01791a9dd78cd3688bd7f57aa14685eba52290413503a5c",
+      "size": 17081,
+      "lastModifiedTime": 1791235658498
+    },
+    {
+      "file": "C:\\Users\\wykva\\IdeaProjects\\Distributed-Systems-Applications\\Assignment-2\\client\\target\\backup\\cache\\distributed\\foodDeliveryClient\\0.1.0\\java21\\distributed-foodDeliveryClient-0.1.0-testable.jar",
+      "hash": "fe9cd8e52ee1fc855e2b35a146454293cf51c1111be0cd55cfe6c922f065f449",
+      "size": 45210,
+      "lastModifiedTime": 1791235658064
+    },
+    {
+      "file": "C:\\Users\\wykva\\IdeaProjects\\Distributed-Systems-Applications\\Assignment-2\\client\\target\\backup\\cache\\distributed\\foodDeliveryClient\\0.1.0\\java21\\distributed-foodDeliveryClient-0.1.0.jar",
+      "hash": "43986b0e97b7cc7732de6f61635cbf4798c7e33f20d25d905c37a7966fc25e1b",
+      "size": 328761,
+      "lastModifiedTime": 1791235657998
+    }
+  ],
+  "test_class_path": "C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\http\\2.17.3\\java21\\platform\\java21\\netty-codec-4.1.137.Final.jar;C:\\PROGRA~1\\BALLER~1\\DISTRI~1\\BALLER~1.4\\repo\\bala\\ballerina\\jwt\\2.15.1\\java21\\platform\\java21\\jwt-native-2.15.1.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\data.jsondata\\1.1.4\\java21\\platform\\java21\\data.jsondata-native-1.1.4.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\file\\1.13.1\\java21\\platform\\java21\\file-native-1.13.1.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\mime\\2.12.3\\java21\\platform\\java21\\jakarta.activation-api-2.0.1.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\mime\\2.12.3\\java21\\platform\\java21\\mimepull-1.9.11.jar;C:\\PROGRA~1\\BALLER~1\\DISTRI~1\\BALLER~1.4\\repo\\bala\\ballerina\\auth\\2.14.0\\java21\\platform\\java21\\auth-native-2.14.0.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\url\\2.6.3\\java21\\platform\\java21\\url-native-2.6.3.jar;C:\\PROGRA~1\\BALLER~1\\DISTRI~1\\BALLER~1.4\\repo\\bala\\ballerina\\test\\0.0.0\\any\\platform\\java21\\testerina-core-2201.13.4.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\http\\2.17.3\\java21\\platform\\java21\\netty-tcnative-boringssl-static-2.0.83.Final-linux-aarch_64.jar;C:\\PROGRA~1\\BALLER~1\\DISTRI~1\\BALLER~1.4\\bin\\..\\bre\\lib\\testerina-runtime-2201.13.4.jar;C:\\PROGRA~1\\BALLER~1\\DISTRI~1\\BALLER~1.4\\bin\\..\\bre\\lib\\asm-tree-9.7.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\http\\2.17.3\\java21\\platform\\java21\\netty-tcnative-boringssl-static-2.0.83.Final-windows-x86_64.jar;C:\\PROGRA~1\\BALLER~1\\DISTRI~1\\BALLER~1.4\\bin\\..\\bre\\lib\\ballerina-lang-2201.13.4.jar;C:\\PROGRA~1\\BALLER~1\\DISTRI~1\\BALLER~1.4\\bin\\..\\bre\\lib\\testerina-core-2201.13.4.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\http\\2.17.3\\java21\\platform\\java21\\netty-tcnative-boringssl-static-2.0.83.Final-osx-aarch_64.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\file\\1.13.1\\java21\\platform\\java21\\org.wso2.transport.local-file-system-6.0.55.jar;C:\\PROGRA~1\\BALLER~1\\DISTRI~1\\BALLER~1.4\\bin\\..\\bre\\lib\\ballerina-rt-2201.13.4.jar;C:\\PROGRA~1\\BALLER~1\\DISTRI~1\\BALLER~1.4\\bin\\..\\bre\\lib\\org.jacoco.report-0.8.12.jar;C:\\PROGRA~1\\BALLER~1\\DISTRI~1\\BALLER~1.4\\bin\\..\\bre\\lib\\asm-9.7.jar;C:\\PROGRA~1\\BALLER~1\\DISTRI~1\\BALLER~1.4\\bin\\..\\bre\\lib\\java-diff-utils-4.5.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\http\\2.17.3\\java21\\platform\\java21\\netty-tcnative-boringssl-static-2.0.83.Final-linux-x86_64.jar;C:\\PROGRA~1\\BALLER~1\\DISTRI~1\\BALLER~1.4\\bin\\..\\bre\\lib\\org.jacoco.core-0.8.12.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\http\\2.17.3\\java21\\platform\\java21\\netty-tcnative-boringssl-static-2.0.83.Final-osx-x86_64.jar;C:\\PROGRA~1\\BALLER~1\\DISTRI~1\\BALLER~1.4\\bin\\..\\bre\\lib\\asm-commons-9.7.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\observe\\1.7.2\\java21\\platform\\java21\\observe-native-1.7.2.jar;C:\\PROGRA~1\\BALLER~1\\DISTRI~1\\BALLER~1.4\\repo\\bala\\ballerinai\\observe\\0.0.0\\java21\\platform\\java21\\observe-internal-native-1.7.1.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\http\\2.17.3\\java21\\platform\\java21\\netty-tcnative-boringssl-static-2.0.83.Final.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\crypto\\2.12.1\\java21\\platform\\java21\\crypto-native-2.12.1.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\crypto\\2.12.1\\java21\\platform\\java21\\bcpg-jdk18on-1.84.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\log\\2.17.1\\java21\\platform\\java21\\log-native-2.17.1.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\observe\\1.7.2\\java21\\platform\\java21\\opentelemetry-semconv-1.21.0-alpha.jar;C:\\PROGRA~1\\BALLER~1\\DISTRI~1\\BALLER~1.4\\repo\\bala\\ballerina\\oauth2\\2.15.0\\java21\\platform\\java21\\oauth2-native-2.15.0.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\http\\2.17.3\\java21\\platform\\java21\\bcutil-jdk18on-1.85.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\http\\2.17.3\\java21\\platform\\java21\\bcpkix-jdk18on-1.85.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\http\\2.17.3\\java21\\platform\\java21\\netty-common-4.1.137.Final.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\os\\1.10.2\\java21\\platform\\java21\\os-native-1.10.2.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\http\\2.17.3\\java21\\platform\\java21\\netty-buffer-4.1.137.Final.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\http\\2.17.3\\java21\\platform\\java21\\netty-resolver-4.1.137.Final.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\http\\2.17.3\\java21\\platform\\java21\\jboss-marshalling-2.0.5.Final.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\observe\\1.7.2\\java21\\platform\\java21\\opentelemetry-sdk-testing-1.32.0.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\http\\2.17.3\\java21\\platform\\java21\\netty-codec-socks-4.1.137.Final.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\data.jsondata\\1.1.4\\java21\\platform\\java21\\json-path-2.9.0.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\http\\2.17.3\\java21\\platform\\java21\\bcprov-jdk18on-1.85.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\http\\2.17.3\\java21\\platform\\java21\\commons-pool-1.5.6.wso2v1.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\http\\2.17.3\\java21\\platform\\java21\\netty-transport-native-unix-common-4.1.137.Final.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\time\\2.8.2\\java21\\platform\\java21\\time-native-2.8.2.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\log\\2.17.1\\java21\\platform\\java21\\log-compiler-plugin-2.17.1.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\task\\2.11.3\\java21\\platform\\java21\\quartz-2.3.2.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\data.jsondata\\1.1.4\\java21\\platform\\java21\\json-smart-2.4.11.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\io\\1.8.2\\java21\\platform\\java21\\io-native-1.8.2.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\http\\2.17.3\\java21\\platform\\java21\\lz4-java-1.11.1.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\mime\\2.12.3\\java21\\platform\\java21\\mime-native-2.12.3.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\os\\1.10.2\\java21\\platform\\java21\\os-test-utils-1.10.2.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\http\\2.17.3\\java21\\platform\\java21\\netty-codec-http2-4.1.137.Final.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\os\\1.10.2\\java21\\platform\\java21\\os-compiler-plugin-1.10.2.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\http\\2.17.3\\java21\\platform\\java21\\netty-tcnative-classes-2.0.83.Final.jar;C:\\PROGRA~1\\BALLER~1\\DISTRI~1\\BALLER~1.4\\repo\\bala\\ballerina\\test\\0.0.0\\any\\platform\\java21\\java-diff-utils-4.5.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\constraint\\1.7.1\\java21\\platform\\java21\\constraint-native-1.7.1.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\observe\\1.7.2\\java21\\platform\\java21\\opentelemetry-sdk-trace-1.32.0.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\http\\2.17.3\\java21\\platform\\java21\\http-native-2.17.3.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\observe\\1.7.2\\java21\\platform\\java21\\opentelemetry-sdk-common-1.32.0.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\io\\1.8.2\\java21\\platform\\java21\\io-compiler-plugin-1.8.2.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\http\\2.17.3\\java21\\platform\\java21\\protobuf-java-3.25.5.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\data.jsondata\\1.1.4\\java21\\platform\\java21\\accessors-smart-2.4.7.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\http\\2.17.3\\java21\\platform\\java21\\netty-handler-proxy-4.1.137.Final.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\task\\2.11.3\\java21\\platform\\java21\\task-native-2.11.3.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\http\\2.17.3\\java21\\platform\\java21\\netty-codec-http-4.1.137.Final.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\http\\2.17.3\\java21\\platform\\java21\\netty-transport-4.1.137.Final.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\http\\2.17.3\\java21\\platform\\java21\\netty-handler-4.1.137.Final.jar;C:\\PROGRA~1\\BALLER~1\\DISTRI~1\\BALLER~1.4\\repo\\bala\\ballerina\\cache\\3.10.0\\java21\\platform\\java21\\cache-native-3.10.0.jar",
   "imports": [
+    "ballerina/log",
+    "ballerina/time",
+    "ballerina/uuid",
     "ballerina/http",
-    "ballerina/io"
+    "ballerina/lang.runtime",
+    "ballerina/file",
+    "ballerina/io",
+    "ballerina/test"
   ]
 }

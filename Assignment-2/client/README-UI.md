@@ -47,9 +47,6 @@ CONFIRMED; after that the backend's 409 invalid-state response is surfaced.
 - Simulator stands in for restaurant and driver clients.
 - All entity IDs are server-generated. The UI never fabricates IDs and shows
   raw contract responses when an expected ID is missing.
-- The backend must provide CORS access when the static server and gateway have
-  different origins.
-- The current customer service address contract rejects the locked UI address
-  payload (`label`, `region`, and `is_default`). Until that backend contract is
-  aligned with `ui.md`, registration stops at the address-only retry sheet and
-  order placement cannot complete.
+- The gateway allows the local development origins `localhost:5500`,
+  `localhost:5502`, `127.0.0.1:5500`, and `127.0.0.1:5502`. Add the deployed
+  UI origin to the gateway CORS configuration for non-local hosting.
