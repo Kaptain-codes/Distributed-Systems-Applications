@@ -18,6 +18,7 @@ map<Delivery> deliveries = {};
 
 service /delivery on new http:Listener(9090) {
     function init() returns error? {
+        check initDeliveryDb();
         return startDeliveryKafkaRuntime();
     }
 
@@ -30,26 +31,32 @@ service /delivery on new http:Listener(9090) {
             return errorResponse(400, "VALIDATION_ERROR", "driver name is required");
         }
         Driver driver = {driverId: uuid:createType4AsString(), name: req.name};
-        drivers[driver.driverId] = driver;
+        error? created = dbCreateDriver(driver);
+        if created is error { return errorResponse(503, "DATABASE_ERROR", "driver could not be created"); }
         return driver;
     }
 
     resource function get drivers/[string driverId]() returns json|http:Response {
-        Driver? driver = drivers[driverId];
+        Driver|error? driverResult = dbDriver(driverId);
+        if driverResult is error { return errorResponse(503, "DATABASE_ERROR", "driver lookup failed"); }
+        Driver? driver = driverResult;
         if driver is () { return errorResponse(404, "NOT_FOUND", "driver was not found"); }
         return driver;
     }
 
     resource function put drivers/[string driverId]/status(@http:Payload DriverStatusRequest body)
             returns json|http:Response {
-        Driver? current = drivers[driverId];
+        Driver|error? currentResult = dbDriver(driverId);
+        if currentResult is error { return errorResponse(503, "DATABASE_ERROR", "driver lookup failed"); }
+        Driver? current = currentResult;
         if current is () { return errorResponse(404, "NOT_FOUND", "driver was not found"); }
         if body.status != "AVAILABLE" && body.status != "OFFLINE" && body.status != "BUSY" {
             return errorResponse(400, "VALIDATION_ERROR", "status must be AVAILABLE, OFFLINE or BUSY");
         }
         Driver next = current.clone();
         next.status = body.status;
-        drivers[driverId] = next;
+        error? updated = dbSetDriverStatus(driverId, next.status);
+        if updated is error { return errorResponse(503, "DATABASE_ERROR", "driver status could not be updated"); }
         return next;
     }
 
@@ -59,7 +66,7 @@ service /delivery on new http:Listener(9090) {
             return errorResponse(400, "VALIDATION_ERROR", "orderId and both addresses are required");
         }
         string? assigned = req.driverId;
-        if assigned is string && drivers[assigned] is () {
+        if assigned is string && dbDriver(assigned) is () {
             return errorResponse(400, "VALIDATION_ERROR", "driver was not registered");
         }
         string now = time:utcToString(time:utcNow());
@@ -67,12 +74,15 @@ service /delivery on new http:Listener(9090) {
             pickupAddress: req.pickupAddress, deliveryAddress: req.deliveryAddress,
             status: assigned is string ? "ASSIGNED" : "UNASSIGNED", driverId: assigned,
             createdAt: now, updatedAt: now};
-        deliveries[delivery.deliveryId] = delivery;
+        error? saved = dbSaveDelivery(delivery);
+        if saved is error { return errorResponse(503, "DATABASE_ERROR", "delivery could not be saved"); }
         return delivery;
     }
 
     resource function get deliveries/[string orderId]() returns json|http:Response {
-        Delivery? delivery = findDeliveryByOrderId(orderId);
+        Delivery|error? deliveryResult = dbFindDelivery(orderId);
+        if deliveryResult is error { return errorResponse(503, "DATABASE_ERROR", "delivery lookup failed"); }
+        Delivery? delivery = deliveryResult;
         if delivery is () { return errorResponse(404, "NOT_FOUND", "delivery was not found"); }
         return delivery;
     }
@@ -86,7 +96,9 @@ service /delivery on new http:Listener(9090) {
     }
 
     resource function post deliveries/[string orderId]/'fail(http:Request req) returns json|http:Response {
-        Delivery? current = findDeliveryByOrderId(orderId);
+        Delivery|error? currentResult = dbFindDelivery(orderId);
+        if currentResult is error { return errorResponse(503, "DATABASE_ERROR", "delivery lookup failed"); }
+        Delivery? current = currentResult;
         if current is () { return errorResponse(404, "NOT_FOUND", "delivery was not found"); }
         if current.status != "ASSIGNED" && current.status != "OUT_FOR_DELIVERY" {
             return errorResponse(409, "INVALID_STATE", "delivery cannot be failed in its current state");
@@ -106,7 +118,8 @@ service /delivery on new http:Listener(9090) {
         next.status = "FAILED";
         next.failureReason = reason;
         next.updatedAt = time:utcToString(time:utcNow());
-        deliveries[next.deliveryId] = next;
+        error? saved = dbSaveDelivery(next);
+        if saved is error { return errorResponse(503, "DATABASE_ERROR", "delivery could not be saved"); }
         return next;
     }
 }
@@ -131,7 +144,18 @@ function transition(string orderId, http:Request req, string target) returns jso
     Delivery next = current.clone();
     next.status = target;
     next.updatedAt = time:utcToString(time:utcNow());
-    deliveries[next.deliveryId] = next;
+    error? saved = dbSaveDelivery(next);
+    if saved is error { return errorResponse(503, "DATABASE_ERROR", "delivery could not be saved"); }
+    string? assignedDriverId = next.driverId;
+    if target == "COMPLETED" && assignedDriverId is string {
+        string driverId = assignedDriverId;
+        Driver|error? driverResult = dbDriver(driverId);
+        Driver? driver = driverResult is Driver ? driverResult : ();
+        if driver is Driver {
+            error? released = dbSetDriverStatus(driverId, "AVAILABLE");
+            if released is error { return errorResponse(503, "DATABASE_ERROR", "driver status could not be updated"); }
+        }
+    }
     string eventType = target == "OUT_FOR_DELIVERY" ? "delivery.picked_up" : "delivery.completed";
     error? published = publishManualDeliveryEvent(orderId, eventType, next);
     if published is error { return errorResponse(503, "PUBLISH_FAILED", eventType + " could not be published"); }
@@ -147,7 +171,8 @@ function validateDriver(Delivery delivery, http:Request req) returns http:Respon
     if delivery.driverId is () || delivery.driverId != header {
         return errorResponse(403, "FORBIDDEN", "driver is not assigned to this delivery");
     }
-    Driver? driver = drivers[header];
+    Driver|error? driverResult = dbDriver(header);
+    Driver? driver = driverResult is Driver ? driverResult : ();
     if driver is () || driver.status == "OFFLINE" {
         return errorResponse(409, "INVALID_STATE", "driver is not available");
     }

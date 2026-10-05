@@ -23,5 +23,4 @@ try {
     Finish-At "AT-4" $id $order $expected $started
     $availableBody = Write-JsonBody "driver-available-status.json" @{status="AVAILABLE"}
     Invoke-Api "PUT" "/api/delivery/drivers/$driverId/status" $availableBody | Out-Null
-    Invoke-Api "PUT" "/api/delivery/drivers/demo-driver/status" $availableBody | Out-Null
 } catch { Write-Output "FAIL AT-4: $($_.Exception.Message)"; exit 1 }

@@ -1,0 +1,545 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: database-credentials
+type: Opaque
+stringData:
+  MONGO_ROOT_USER: dev_admin
+  ORDER_DB_PASSWORD: CHANGE_ME_ORDER_ROOT
+  ORDER_DB_APP_PASSWORD: CHANGE_ME_ORDER_APP
+  CUSTOMER_DB_PASSWORD: CHANGE_ME_CUSTOMER_ROOT
+  CUSTOMER_DB_APP_PASSWORD: CHANGE_ME_CUSTOMER_APP
+  RESTAURANT_DB_PASSWORD: CHANGE_ME_RESTAURANT_ROOT
+  RESTAURANT_DB_APP_PASSWORD: CHANGE_ME_RESTAURANT_APP
+  PAYMENT_DB_PASSWORD: CHANGE_ME_PAYMENT_ROOT
+  PAYMENT_DB_APP_PASSWORD: CHANGE_ME_PAYMENT_APP
+  DELIVERY_DB_PASSWORD: CHANGE_ME_DELIVERY_SA
+  NOTIFICATION_DB_PASSWORD: CHANGE_ME_NOTIFICATION_ROOT
+  NOTIFICATION_DB_APP_PASSWORD: CHANGE_ME_NOTIFICATION_APP
+  ADMIN_DB_PASSWORD: CHANGE_ME_ADMIN_ROOT
+  ADMIN_DB_APP_PASSWORD: CHANGE_ME_ADMIN_APP
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: order-db-data
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: customer-db-data
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: restaurant-db-data
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: payment-db-data
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: delivery-db-data
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: notification-db-data
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: admin-db-data
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gateway-redis-data
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: notification-redis-data
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: payment-redis-data
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-db
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: order-db}
+  template:
+    metadata:
+      labels: {app: order-db}
+    spec:
+      securityContext:
+        fsGroup: 10001
+      containers:
+        - name: mongodb
+          image: mongo:7.0
+          ports: [{name: mongodb, containerPort: 27017}]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 10001
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              valueFrom: {secretKeyRef: {name: database-credentials, key: MONGO_ROOT_USER}}
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom: {secretKeyRef: {name: database-credentials, key: ORDER_DB_PASSWORD}}
+            - name: MONGO_APP_USER
+              value: order_app
+            - name: MONGO_APP_PASSWORD
+              valueFrom: {secretKeyRef: {name: database-credentials, key: ORDER_DB_APP_PASSWORD}}
+            - name: MONGO_APP_DATABASE
+              value: orders
+          volumeMounts: [{name: data, mountPath: /data/db}]
+          resources:
+            requests: {cpu: "100m", memory: 512Mi}
+            limits: {cpu: "1", memory: 512Mi}
+          readinessProbe:
+            exec:
+              command: [sh, -c, 'mongosh --quiet -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --eval "db.adminCommand({ping: 1})"']
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes: [{name: data, persistentVolumeClaim: {claimName: order-db-data}}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-db
+spec:
+  selector: {app: order-db}
+  ports: [{name: mongodb, port: 27017, targetPort: mongodb}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-db
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: notification-db}
+  template:
+    metadata:
+      labels: {app: notification-db}
+    spec:
+      securityContext:
+        fsGroup: 10001
+      containers:
+        - name: mongodb
+          image: mongo:7.0
+          ports: [{name: mongodb, containerPort: 27017}]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 10001
+          env:
+            - {name: MONGO_INITDB_ROOT_USERNAME, valueFrom: {secretKeyRef: {name: database-credentials, key: MONGO_ROOT_USER}}}
+            - {name: MONGO_INITDB_ROOT_PASSWORD, valueFrom: {secretKeyRef: {name: database-credentials, key: NOTIFICATION_DB_PASSWORD}}}
+            - {name: MONGO_APP_USER, value: notification_app}
+            - {name: MONGO_APP_PASSWORD, valueFrom: {secretKeyRef: {name: database-credentials, key: NOTIFICATION_DB_APP_PASSWORD}}}
+            - {name: MONGO_APP_DATABASE, value: notifications}
+          volumeMounts: [{name: data, mountPath: /data/db}]
+          resources: {requests: {cpu: "100m", memory: 512Mi}, limits: {cpu: "1", memory: 512Mi}}
+          readinessProbe:
+            exec:
+              command: [sh, -c, 'mongosh --quiet -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --eval "db.adminCommand({ping: 1})"']
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes: [{name: data, persistentVolumeClaim: {claimName: notification-db-data}}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-db
+spec:
+  selector: {app: notification-db}
+  ports: [{name: mongodb, port: 27017, targetPort: mongodb}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: admin-db
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: admin-db}
+  template:
+    metadata:
+      labels: {app: admin-db}
+    spec:
+      securityContext:
+        fsGroup: 10001
+      containers:
+        - name: mongodb
+          image: mongo:7.0
+          ports: [{name: mongodb, containerPort: 27017}]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 10001
+          env:
+            - {name: MONGO_INITDB_ROOT_USERNAME, valueFrom: {secretKeyRef: {name: database-credentials, key: MONGO_ROOT_USER}}}
+            - {name: MONGO_INITDB_ROOT_PASSWORD, valueFrom: {secretKeyRef: {name: database-credentials, key: ADMIN_DB_PASSWORD}}}
+            - {name: MONGO_APP_USER, value: admin_app}
+            - {name: MONGO_APP_PASSWORD, valueFrom: {secretKeyRef: {name: database-credentials, key: ADMIN_DB_APP_PASSWORD}}}
+            - {name: MONGO_APP_DATABASE, value: admin}
+          volumeMounts: [{name: data, mountPath: /data/db}]
+          resources: {requests: {cpu: "100m", memory: 512Mi}, limits: {cpu: "1", memory: 512Mi}}
+          readinessProbe:
+            exec:
+              command: [sh, -c, 'mongosh --quiet -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --eval "db.adminCommand({ping: 1})"']
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes: [{name: data, persistentVolumeClaim: {claimName: admin-db-data}}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: admin-db
+spec:
+  selector: {app: admin-db}
+  ports: [{name: mongodb, port: 27017, targetPort: mongodb}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: customer-db
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: customer-db}
+  template:
+    metadata:
+      labels: {app: customer-db}
+    spec:
+      securityContext:
+        fsGroup: 10001
+      containers:
+        - name: mysql
+          image: mysql:8.4
+          ports: [{name: mysql, containerPort: 3306}]
+          # MySQL's official entrypoint initializes the data directory as root.
+          # Keep privilege escalation disabled while retaining root startup.
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: false
+            runAsUser: 0
+          env:
+            - {name: MYSQL_ROOT_PASSWORD, valueFrom: {secretKeyRef: {name: database-credentials, key: CUSTOMER_DB_PASSWORD}}}
+            - {name: MYSQL_DATABASE, value: customer}
+            - {name: MYSQL_USER, value: customer_app}
+            - {name: MYSQL_PASSWORD, valueFrom: {secretKeyRef: {name: database-credentials, key: CUSTOMER_DB_APP_PASSWORD}}}
+          volumeMounts: [{name: data, mountPath: /var/lib/mysql}]
+          resources: {requests: {cpu: "100m", memory: 512Mi}, limits: {cpu: "1", memory: 1Gi}}
+          readinessProbe: {exec: {command: [sh, -c, 'mysqladmin ping -h 127.0.0.1 -uroot -p"$MYSQL_ROOT_PASSWORD" --silent']}, initialDelaySeconds: 30, periodSeconds: 10}
+      volumes: [{name: data, persistentVolumeClaim: {claimName: customer-db-data}}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: customer-db
+spec:
+  selector: {app: customer-db}
+  ports: [{name: mysql, port: 3306, targetPort: mysql}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: restaurant-db
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: restaurant-db}
+  template:
+    metadata:
+      labels: {app: restaurant-db}
+    spec:
+      securityContext:
+        fsGroup: 10001
+      containers:
+        - name: mysql
+          image: mysql:8.4
+          ports: [{name: mysql, containerPort: 3306}]
+          # MySQL's official entrypoint initializes the data directory as root.
+          # Keep privilege escalation disabled while retaining root startup.
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: false
+            runAsUser: 0
+          env:
+            - {name: MYSQL_ROOT_PASSWORD, valueFrom: {secretKeyRef: {name: database-credentials, key: RESTAURANT_DB_PASSWORD}}}
+            - {name: MYSQL_DATABASE, value: restaurant}
+            - {name: MYSQL_USER, value: restaurant_app}
+            - {name: MYSQL_PASSWORD, valueFrom: {secretKeyRef: {name: database-credentials, key: RESTAURANT_DB_APP_PASSWORD}}}
+          volumeMounts: [{name: data, mountPath: /var/lib/mysql}]
+          resources: {requests: {cpu: "100m", memory: 512Mi}, limits: {cpu: "1", memory: 1Gi}}
+          readinessProbe: {exec: {command: [sh, -c, 'mysqladmin ping -h 127.0.0.1 -uroot -p"$MYSQL_ROOT_PASSWORD" --silent']}, initialDelaySeconds: 30, periodSeconds: 10}
+      volumes: [{name: data, persistentVolumeClaim: {claimName: restaurant-db-data}}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: restaurant-db
+spec:
+  selector: {app: restaurant-db}
+  ports: [{name: mysql, port: 3306, targetPort: mysql}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-db
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: payment-db}
+  template:
+    metadata:
+      labels: {app: payment-db}
+    spec:
+      securityContext:
+        fsGroup: 10001
+      containers:
+        - name: mysql
+          image: mysql:8.4
+          ports: [{name: mysql, containerPort: 3306}]
+          # MySQL's official entrypoint initializes the data directory as root.
+          # Keep privilege escalation disabled while retaining root startup.
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: false
+            runAsUser: 0
+          env:
+            - {name: MYSQL_ROOT_PASSWORD, valueFrom: {secretKeyRef: {name: database-credentials, key: PAYMENT_DB_PASSWORD}}}
+            - {name: MYSQL_DATABASE, value: payment}
+            - {name: MYSQL_USER, value: payment_app}
+            - {name: MYSQL_PASSWORD, valueFrom: {secretKeyRef: {name: database-credentials, key: PAYMENT_DB_APP_PASSWORD}}}
+          volumeMounts: [{name: data, mountPath: /var/lib/mysql}]
+          resources: {requests: {cpu: "100m", memory: 512Mi}, limits: {cpu: "1", memory: 1Gi}}
+          readinessProbe: {exec: {command: [sh, -c, 'mysqladmin ping -h 127.0.0.1 -uroot -p"$MYSQL_ROOT_PASSWORD" --silent']}, initialDelaySeconds: 30, periodSeconds: 10}
+      volumes: [{name: data, persistentVolumeClaim: {claimName: payment-db-data}}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: payment-db
+spec:
+  selector: {app: payment-db}
+  ports: [{name: mysql, port: 3306, targetPort: mysql}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: delivery-db
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: delivery-db}
+  template:
+    metadata:
+      labels: {app: delivery-db}
+    spec:
+      securityContext:
+        fsGroup: 10001
+      containers:
+        - name: mssql
+          image: mcr.microsoft.com/mssql/server:2022-CU26-ubuntu-22.04
+          ports: [{name: mssql, containerPort: 1433}]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 10001
+          env:
+            - {name: ACCEPT_EULA, value: "Y"}
+            - {name: MSSQL_SA_PASSWORD, valueFrom: {secretKeyRef: {name: database-credentials, key: DELIVERY_DB_PASSWORD}}}
+          volumeMounts: [{name: data, mountPath: /var/opt/mssql}]
+          # SQL Server 2022 needs ~2Gi minimum to start
+          resources: {requests: {cpu: "100m", memory: 2Gi}, limits: {cpu: "1", memory: 4Gi}}
+          readinessProbe: {tcpSocket: {port: mssql}, initialDelaySeconds: 45, periodSeconds: 10}
+      volumes: [{name: data, persistentVolumeClaim: {claimName: delivery-db-data}}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: delivery-db
+spec:
+  selector: {app: delivery-db}
+  ports: [{name: mssql, port: 1433, targetPort: mssql}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway-redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: gateway-redis}
+  template:
+    metadata:
+      labels: {app: gateway-redis}
+    spec:
+      securityContext:
+        fsGroup: 10001
+      containers:
+        - name: redis
+          image: redis:7.4-alpine
+          ports: [{name: redis, containerPort: 6379}]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 10001
+          args: [redis-server, --appendonly, "yes"]
+          volumeMounts: [{name: data, mountPath: /data}]
+          resources: {requests: {cpu: "25m", memory: 128Mi}, limits: {cpu: "250m", memory: 256Mi}}
+          readinessProbe: {exec: {command: [redis-cli, ping]}, periodSeconds: 5}
+      volumes: [{name: data, persistentVolumeClaim: {claimName: gateway-redis-data}}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway-redis
+spec:
+  selector: {app: gateway-redis}
+  ports: [{name: redis, port: 6379, targetPort: redis}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: notification-redis}
+  template:
+    metadata:
+      labels: {app: notification-redis}
+    spec:
+      securityContext:
+        fsGroup: 10001
+      containers:
+        - name: redis
+          image: redis:7.4-alpine
+          ports: [{name: redis, containerPort: 6379}]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 10001
+          args: [redis-server, --appendonly, "yes"]
+          volumeMounts: [{name: data, mountPath: /data}]
+          resources: {requests: {cpu: "25m", memory: 128Mi}, limits: {cpu: "250m", memory: 256Mi}}
+          readinessProbe: {exec: {command: [redis-cli, ping]}, periodSeconds: 5}
+      volumes: [{name: data, persistentVolumeClaim: {claimName: notification-redis-data}}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-redis
+spec:
+  selector: {app: notification-redis}
+  ports: [{name: redis, port: 6379, targetPort: redis}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: payment-redis}
+  template:
+    metadata:
+      labels: {app: payment-redis}
+    spec:
+      securityContext:
+        fsGroup: 10001
+      containers:
+        - name: redis
+          image: redis:7.4-alpine
+          ports: [{name: redis, containerPort: 6379}]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 10001
+          args: [redis-server, --appendonly, "yes"]
+          volumeMounts: [{name: data, mountPath: /data}]
+          resources: {requests: {cpu: "25m", memory: 128Mi}, limits: {cpu: "250m", memory: 256Mi}}
+          readinessProbe: {exec: {command: [redis-cli, ping]}, periodSeconds: 5}
+      volumes: [{name: data, persistentVolumeClaim: {claimName: payment-redis-data}}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: payment-redis
+spec:
+  selector: {app: payment-redis}
+  ports: [{name: redis, port: 6379, targetPort: redis}]

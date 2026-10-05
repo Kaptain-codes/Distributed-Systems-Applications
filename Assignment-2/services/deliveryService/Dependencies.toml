@@ -78,7 +78,7 @@ dependencies = [
 [[package]]
 org = "ballerina"
 name = "http"
-version = "2.16.9"
+version = "2.17.3"
 dependencies = [
 	{org = "ballerina", name = "auth"},
 	{org = "ballerina", name = "cache"},
@@ -283,6 +283,20 @@ dependencies = [
 
 [[package]]
 org = "ballerina"
+name = "sql"
+version = "1.19.0"
+dependencies = [
+	{org = "ballerina", name = "io"},
+	{org = "ballerina", name = "jballerina.java"},
+	{org = "ballerina", name = "lang.object"},
+	{org = "ballerina", name = "time"}
+]
+modules = [
+	{org = "ballerina", packageName = "sql", moduleName = "sql"}
+]
+
+[[package]]
+org = "ballerina"
 name = "task"
 version = "2.11.3"
 dependencies = [
@@ -322,7 +336,7 @@ modules = [
 [[package]]
 org = "ballerina"
 name = "url"
-version = "2.6.2"
+version = "2.6.3"
 dependencies = [
 	{org = "ballerina", name = "jballerina.java"}
 ]
@@ -351,6 +365,19 @@ dependencies = [
 ]
 modules = [
 	{org = "ballerinai", packageName = "observe", moduleName = "observe"}
+]
+
+[[package]]
+org = "ballerinax"
+name = "cdc"
+version = "1.4.0"
+dependencies = [
+	{org = "ballerina", name = "crypto"},
+	{org = "ballerina", name = "data.jsondata"},
+	{org = "ballerina", name = "io"},
+	{org = "ballerina", name = "jballerina.java"},
+	{org = "ballerina", name = "log"},
+	{org = "ballerinai", name = "observe"}
 ]
 
 [[package]]
@@ -390,6 +417,29 @@ modules = [
 ]
 
 [[package]]
+org = "ballerinax"
+name = "mssql"
+version = "1.19.1"
+dependencies = [
+	{org = "ballerina", name = "crypto"},
+	{org = "ballerina", name = "jballerina.java"},
+	{org = "ballerina", name = "sql"},
+	{org = "ballerina", name = "time"},
+	{org = "ballerinax", name = "cdc"}
+]
+modules = [
+	{org = "ballerinax", packageName = "mssql", moduleName = "mssql"}
+]
+
+[[package]]
+org = "ballerinax"
+name = "mssql.driver"
+version = "1.7.1"
+modules = [
+	{org = "ballerinax", packageName = "mssql.driver", moduleName = "mssql.driver"}
+]
+
+[[package]]
 org = "wykva"
 name = "deliveryService"
 version = "0.1.0"
@@ -398,12 +448,15 @@ dependencies = [
 	{org = "ballerina", name = "io"},
 	{org = "ballerina", name = "lang.string"},
 	{org = "ballerina", name = "log"},
+	{org = "ballerina", name = "sql"},
 	{org = "ballerina", name = "task"},
 	{org = "ballerina", name = "test"},
 	{org = "ballerina", name = "time"},
 	{org = "ballerina", name = "uuid"},
 	{org = "ballerinai", name = "observe"},
-	{org = "ballerinax", name = "kafka"}
+	{org = "ballerinax", name = "kafka"},
+	{org = "ballerinax", name = "mssql"},
+	{org = "ballerinax", name = "mssql.driver"}
 ]
 modules = [
 	{org = "wykva", packageName = "deliveryService", moduleName = "deliveryService"}

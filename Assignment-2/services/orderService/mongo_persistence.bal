@@ -425,3 +425,5 @@ function markDurableOutboxPublished(string eventId) returns error? {
     _ = check collection->updateOne({eventId: eventId},
         {set: {status: "PUBLISHED", updatedAt: time:utcToString(time:utcNow())}});
 }
+
+// how is the mongo client used here? It is used to connect to the MongoDB database and perform various operations such as inserting, updating, and querying documents in different collections. The client is initialized with a connection URI and options for socket and connection timeouts. Once connected, it retrieves specific collections (orders, processed events, pending events, outbox) and performs operations like ensuring indexes, recovering durable work, persisting order snapshots, applying atomic transitions, and managing durable events and outbox messages.

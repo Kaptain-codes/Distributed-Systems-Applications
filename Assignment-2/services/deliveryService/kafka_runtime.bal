@@ -42,7 +42,7 @@ function startDeliveryKafkaRuntime() returns error? {
     if !kafkaRuntimeEnabled {
         return;
     }
-    if drivers.length() == 0 {
+    if !durableStateEnabled && drivers.length() == 0 {
         drivers["demo-driver"] = {driverId: "demo-driver", name: "Demo Driver", status: "AVAILABLE"};
     }
     kafka:Consumer|error consumer = new (kafkaBootstrap, deliveryConsumerConfiguration);
@@ -87,31 +87,34 @@ function handleDeliveryRecord(kafka:Consumer consumer, kafka:AnydataConsumerReco
         return;
     }
     DeliveryEvent|error event = parsed.cloneWithType(DeliveryEvent);
-    if event is error || deliveryProcessedEvents[event.eventId] == true {
+    if event is error {
+        commitDeliveryRecord(consumer, kafkaRecord);
+        return;
+    }
+    boolean|error processed = dbEventProcessed(event.eventId);
+    if processed is error {
+        log:printError("delivery event deduplication lookup failed", 'error = processed);
+        return;
+    }
+    if processed {
         commitDeliveryRecord(consumer, kafkaRecord);
         return;
     }
     if event.eventType == "orders.ready" {
         orderEvents[event.orderId] = event;
-        foreach string deliveryId in deliveries.keys() {
-            Delivery? existing = deliveries[deliveryId];
-            if existing is Delivery && existing.orderId == event.orderId &&
-                existing.status != "CANCELLED" {
-                deliveryProcessedEvents[event.eventId] = true;
-                commitDeliveryRecord(consumer, kafkaRecord);
-                return;
-            }
+        Delivery|error? existing = dbFindDelivery(event.orderId);
+        if existing is error {
+            log:printError("delivery lookup failed while assigning order", 'error = existing);
+            return;
         }
-        string? driverId = ();
-        foreach string id in drivers.keys() {
-            Driver? driver = drivers[id];
-            if driver is Driver && driver.status == "AVAILABLE" {
-                driverId = id;
-                driver.status = "BUSY";
-                drivers[id] = driver;
-                break;
-            }
+        if existing is Delivery && existing.status != "CANCELLED" {
+            error? marked = dbMarkEvent(event.eventId);
+            if marked is error { log:printError("delivery event mark failed", 'error = marked); }
+            commitDeliveryRecord(consumer, kafkaRecord);
+            return;
         }
+        Driver|error? selected = dbAvailableDriver();
+        string? driverId = selected is Driver ? selected.driverId : ();
         if driverId is string {
             string now = time:utcToString(time:utcNow());
             Delivery delivery = {
@@ -119,11 +122,27 @@ function handleDeliveryRecord(kafka:Consumer consumer, kafka:AnydataConsumerReco
                 pickupAddress: "Demo Restaurant", deliveryAddress: "Demo Address",
                 driverId: driverId, status: "ASSIGNED", createdAt: now, updatedAt: now
             };
-            deliveries[delivery.deliveryId] = delivery;
-            error? assigned = publishDeliveryEvent("delivery.assigned", event, delivery);
-            if assigned is error {
-                log:printError("delivery assignment publication failed", 'error = assigned);
+            boolean|error created = dbCreateDeliveryIfAbsent(delivery);
+            if created is error {
+                error? released = dbSetDriverStatus(driverId, "AVAILABLE");
+                if released is error {
+                    log:printError("failed to release driver after assignment failure",
+                        'error = released);
+                }
+                log:printError("delivery assignment persistence failed", 'error = created);
                 return;
+            }
+            if created {
+                error? assigned = publishDeliveryEvent("delivery.assigned", event, delivery);
+                if assigned is error {
+                    log:printError("delivery assignment publication failed", 'error = assigned);
+                    return;
+                }
+            } else {
+                error? released = dbSetDriverStatus(driverId, "AVAILABLE");
+                if released is error {
+                    log:printError("duplicate delivery driver release failed", 'error = released);
+                }
             }
         } else {
             error? unavailable = publishDeliveryEvent("delivery.not_assigned", event,
@@ -134,15 +153,15 @@ function handleDeliveryRecord(kafka:Consumer consumer, kafka:AnydataConsumerReco
             }
         }
     } else if event.eventType == "orders.cancelled" || event.eventType == "orders.autocancelled" {
-        foreach string id in deliveries.keys() {
-            Delivery? delivery = deliveries[id];
-            if delivery is Delivery && delivery.orderId == event.orderId {
-                delivery.status = "CANCELLED";
-                deliveries[id] = delivery;
-            }
+        Delivery|error? delivery = dbFindDelivery(event.orderId);
+        if delivery is Delivery {
+            delivery.status = "CANCELLED";
+            error? saved = dbSaveDelivery(delivery);
+            if saved is error { log:printError("delivery cancellation persistence failed", 'error = saved); }
         }
     }
-    deliveryProcessedEvents[event.eventId] = true;
+    error? marked = dbMarkEvent(event.eventId);
+    if marked is error { log:printError("delivery event mark failed", 'error = marked); }
     commitDeliveryRecord(consumer, kafkaRecord);
 }
 

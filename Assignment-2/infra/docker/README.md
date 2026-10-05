@@ -93,18 +93,20 @@ creates new random passwords, but existing database volumes still contain the
 old credentials from their first initialization. MySQL, MongoDB, and MSSQL apply
 their initialization credentials only once, on an empty data directory. The
 result is an authentication failure that can look like a broken container
-(SCRAM mismatch for MongoDB or SQL login failure for MSSQL).
+(SCRAM mismatch for MongoDB, MySQL login failure, or SQL login failure for MSSQL).
 
 To recover, delete only the affected named volume(s), then start the profile
-again so the database initializes with the regenerated password. The Compose
-project name is `distributed_food_delivery_system`; prefer the reset script
-above instead of hard-coding volume names:
+again so the database initializes with the regenerated password. Prefer the reset script above instead of hard-coding the Compose project name
+or volume names:
 
 ```powershell
 docker volume ls
 docker volume ls --filter name=customer-db-data
 docker volume rm <name-from-docker-volume-ls>
 ```
+
+Never include `infra/docker/.env` in a submission, ZIP, issue, or support
+bundle. It contains local credentials generated for the persistent volumes.
 
 The volume names are declared at the bottom of `docker-compose.yml`
 (`order-db-data`, `restaurant-db-data`, `payment-db-data`, `delivery-db-data`,
@@ -154,6 +156,21 @@ Current topics:
   topics before completing. `kafka/check-topics.sh` and
   `scripts/check-topics.ps1` provide host-side verification.
 
+## Connection table
+
+These host values match the committed `.env.example`. Inside Compose, use the
+service name and the container port instead of `localhost`.
+
+| Service | Host | Port | Username | Password variable | Authentication database |
+| --- | --- | ---: | --- | --- | --- |
+| order-db (MongoDB) | `localhost` | 27017 | `order_app` | `ORDER_DB_APP_PASSWORD` | `orders` |
+| customer-db (MySQL) | `localhost` | 3307 | `customer_app` | `CUSTOMER_DB_APP_PASSWORD` | `customer` |
+| restaurant-db (MySQL) | `localhost` | 3308 | `restaurant_app` | `RESTAURANT_DB_APP_PASSWORD` | `restaurant` |
+| payment-db (MySQL) | `localhost` | 3309 | `payment_app` | `PAYMENT_DB_APP_PASSWORD` | `payment` |
+| notification-db (MongoDB) | `localhost` | 27018 | `notification_app` | `NOTIFICATION_DB_APP_PASSWORD` | `notifications` |
+| admin-db (MongoDB) | `localhost` | 27019 | `admin_app` | `ADMIN_DB_APP_PASSWORD` | `admin` |
+| delivery-db (SQL Server) | `localhost` | 1437 | `sa` | `DELIVERY_DB_PASSWORD` | `master` |
+
 Add new topics to the `TOPICS` array in
 [`kafka/create-topics.sh`](kafka/create-topics.sh).
 
@@ -164,7 +181,9 @@ Add new topics to the `TOPICS` array in
 This is usually a stale volume/password mismatch. Existing MySQL, MongoDB, and
 MSSQL volumes retain the credentials from their first initialization. Follow the
 volume recovery steps above; do not keep deleting and regenerating `.env`
-without deleting the affected volume.
+without deleting the affected volume. The MySQL healthcheck uses an
+authenticated query, but a client login can still fail if the application
+password in `.env` no longer matches the password stored in the volume.
 
 ### Image pulls time out during TLS or fail while copying
 

@@ -64,7 +64,7 @@ services:
       # were competing for CPU/memory at once (confirmed via
       # `docker inspect ... .State.Health` showing "exceeded timeout (5s)"
       # on every failed attempt even though a manual run succeeded instantly).
-      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list > /dev/null 2>&1"]
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server kafka:9092 --list > /dev/null 2>&1"]
       interval: 10s
       timeout: 15s
       retries: 15
@@ -342,6 +342,12 @@ services:
       BAL_CONFIG_DATA: |
         kafkaRuntimeEnabled = true
         kafkaBootstrap = "kafka:9092"
+        durableStateEnabled = true
+        sqlServerHost = "delivery-db"
+        sqlServerPort = 1433
+        sqlServerDatabase = "delivery"
+        sqlServerUser = "sa"
+        sqlServerPassword = "${DELIVERY_DB_PASSWORD}"
     ports:
       - "127.0.0.1:${DELIVERY_SERVICE_PORT:-8086}:9090"
     depends_on:
@@ -477,7 +483,9 @@ services:
         condition: service_healthy
     environment:
       SQLCMDPASSWORD: ${DELIVERY_DB_PASSWORD:?Set DELIVERY_DB_PASSWORD in .env}
-    command: ["/opt/mssql-tools18/bin/sqlcmd", "-S", "delivery-db", "-U", "sa", "-C", "-b", "-Q", "IF DB_ID('delivery') IS NULL CREATE DATABASE delivery;"]
+    volumes:
+      - ./initdb/delivery-db/01-schema.sql:/opt/app/01-schema.sql:ro
+    command: ["/bin/bash", "-c", "/opt/mssql-tools18/bin/sqlcmd -S delivery-db -U sa -C -b -Q \"IF DB_ID('delivery') IS NULL CREATE DATABASE delivery;\" && /opt/mssql-tools18/bin/sqlcmd -S delivery-db -U sa -C -b -d delivery -i /opt/app/01-schema.sql"]
     networks: [backbone]
 
   # Sholm

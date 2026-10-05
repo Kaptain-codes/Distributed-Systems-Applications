@@ -4,6 +4,7 @@ $KafkaContainer = "distributed_food_delivery_system-kafka-1"
 $BodyDir = Join-Path $env:TEMP "dsa-at-bodies"
 New-Item -ItemType Directory -Force $BodyDir | Out-Null
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+$script:AtRunStartedEpochMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
 
 function Write-JsonBody([string]$name, [object]$value) {
     $path = Join-Path $BodyDir $name
@@ -55,8 +56,8 @@ function Wait-Order([string]$id, [string[]]$statuses, [int]$seconds = 120) {
 function Wait-Topic([string]$id, [string]$topic, [int]$seconds = 120) {
     $deadline = (Get-Date).AddSeconds($seconds)
     do {
-        $found = docker exec $KafkaContainer bash -lc "kafka-console-consumer --bootstrap-server localhost:9092 --topic $topic --from-beginning --timeout-ms 3000 --property print.timestamp=true --property print.key=true 2>/dev/null" | Where-Object { $_ -match [regex]::Escape($id) }
-        if ($found) { return $true }
+        $records = @(Get-KafkaRecords $topic $id)
+        if ($records.Count -gt 0) { return $true }
         Start-Sleep -Seconds 3
     } while ((Get-Date) -lt $deadline)
     return $false
@@ -90,16 +91,33 @@ function Convert-KafkaRecord([string]$topic, [string]$line) {
         Key = $key
         Line = $line
         Payload = $payload
+        BusinessOrderId = if ($payload) {
+            if ($payload.orderId) { [string]$payload.orderId }
+            elseif ($payload.correlationId) { [string]$payload.correlationId }
+            elseif ($payload.data -and $payload.data.orderSummary -and $payload.data.orderSummary.orderId) { [string]$payload.data.orderSummary.orderId }
+            else { "" }
+        } else { "" }
     }
+}
+
+function Get-KafkaRecords([string]$topic, [string]$id) {
+    $lines = @(docker exec $KafkaContainer bash -lc "kafka-console-consumer --bootstrap-server localhost:9092 --topic $topic --from-beginning --timeout-ms 5000 --property print.timestamp=true --property print.key=true 2>/dev/null")
+    $records = @()
+    foreach ($line in $lines) {
+        $record = Convert-KafkaRecord $topic ([string]$line)
+        if ($record.BusinessOrderId -eq $id -and
+            $record.Timestamp -ge $script:AtRunStartedEpochMs) {
+            $records += $record
+        }
+    }
+    return $records
 }
 
 function Collect-Topics([string]$id, [string[]]$expected) {
     $records = @()
     $topics = @(Get-BaseKafkaTopics)
     foreach ($topic in $topics) {
-        $lines = @(docker exec $KafkaContainer bash -lc "kafka-console-consumer --bootstrap-server localhost:9092 --topic $topic --from-beginning --timeout-ms 5000 --property print.timestamp=true --property print.key=true 2>/dev/null" |
-            Where-Object { $_ -match [regex]::Escape($id) })
-        foreach ($line in $lines) { $records += Convert-KafkaRecord $topic ([string]$line) }
+        $records += @(Get-KafkaRecords $topic $id)
     }
     return $records
 }
@@ -116,8 +134,12 @@ function Assert-Topics([string]$id, [string[]]$expected) {
     }
     $duplicateReport = @()
     foreach ($group in ($records | Group-Object Topic)) {
-        $ids = @($group.Group | Where-Object { $_.EventId } | Select-Object -ExpandProperty EventId -Unique)
-        if ($ids.Count -gt 1) { throw "topic $($group.Name) has multiple eventIds" }
+        $missingIds = @($group.Group | Where-Object { [string]::IsNullOrWhiteSpace($_.EventId) })
+        if ($missingIds.Count -gt 0) { throw "topic $($group.Name) contains a matching record without eventId" }
+        $ids = @($group.Group | Select-Object -ExpandProperty EventId -Unique)
+        if ($ids.Count -gt 1) {
+            throw "topic $($group.Name) has different eventIds for the same business order; this is a duplicate business event, not redelivery: $($ids -join ',')"
+        }
         if ($group.Count -gt 1) {
             $duplicateReport += "$($group.Name) x $($group.Count)"
         }
@@ -139,6 +161,21 @@ function Assert-Topics([string]$id, [string[]]$expected) {
         }
     }
     Write-Host "PASS distinct topics, one eventId per topic, and causal timestamp ordering"
+    return $records
+}
+
+function Assert-SingleEventTopic([string]$id, [string]$topic, [int]$minimumRecords = 1) {
+    $records = @(Get-KafkaRecords $topic $id)
+    if ($records.Count -lt $minimumRecords) {
+        throw "topic $topic has $($records.Count) run-scoped records for $id; expected at least $minimumRecords"
+    }
+    $missingIds = @($records | Where-Object { [string]::IsNullOrWhiteSpace($_.EventId) })
+    if ($missingIds.Count -gt 0) { throw "topic $topic contains a run-scoped record without eventId" }
+    $ids = @($records | Select-Object -ExpandProperty EventId -Unique)
+    if ($ids.Count -ne 1) {
+        throw "topic $topic has $($ids.Count) eventIds for one business order: $($ids -join ',')"
+    }
+    Write-Host "PASS $topic has one business event ID ($($ids[0])) across $($records.Count) record(s); repeated same ID is redelivery"
     return $records
 }
 

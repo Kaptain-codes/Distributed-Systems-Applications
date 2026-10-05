@@ -1,5 +1,316 @@
 # debug.md - Assignment 2 infra audit
 
+## 2026-10-05 Task 2 fix and verification
+
+The first full-stack AT-1 run created order
+`64ed95c4-6e18-4c6b-9d78-943f6a32b5ba`. It completed the delivery flow:
+
+```text
+GET http://localhost:8080/api/orders/64ed95c4-6e18-4c6b-9d78-943f6a32b5ba
+status=DELIVERED, paymentStatus=PAID
+
+GET http://localhost:8086/delivery/deliveries/64ed95c4-6e18-4c6b-9d78-943f6a32b5ba
+HTTP/1.1 200 OK
+status=COMPLETED, driverId=demo-driver
+```
+
+A second order exposed the repeat-delivery defect: `orders.ready` was
+published and the delivery consumer group had zero lag, but no delivery was
+created because `demo-driver` remained `BUSY` after completion. The delivery
+transition updated the delivery record but did not release its driver.
+
+Minimal fix in `services/deliveryService/service.bal`: when the target
+transition is `COMPLETED`, the assigned driver's status is set back to
+`AVAILABLE`. This lets the same driver be claimed for the next order without
+changing event names or API shapes.
+
+The first rebuild attempt caught and corrected a Ballerina optional-field
+typing error. The final Docker build succeeded:
+
+```text
+Generating executable
+target/bin/deliveryService.jar
+Image distributed_food_delivery_system-delivery-service Built
+```
+
+The rebuilt container was recreated and healthy:
+
+```text
+delivery-service-1  Up 25 seconds (healthy)
+GET http://localhost:8086/delivery/health
+HTTP/1.1 200 OK
+{"status":"UP", "service":"delivery"}
+```
+
+Standalone `bal test` after the fix:
+
+```text
+[pass] testDeliveryLookupReturnsCommonNotFoundError
+[pass] testServiceWithEmptyName
+[pass] testServiceWithProperName
+3 passing
+0 failing
+0 skipped
+```
+
+A fresh verification order
+`638416f0-09a9-4721-aa30-f6d97ba4e9af` reached the required terminal state:
+
+```text
+GET http://localhost:8080/api/order/orders/638416f0-09a9-4721-aa30-f6d97ba4e9af
+status=DELIVERED, paymentStatus=PAID
+
+GET http://localhost:8086/delivery/deliveries/638416f0-09a9-4721-aa30-f6d97ba4e9af
+HTTP/1.1 200 OK
+status=COMPLETED, driverId=demo-driver
+
+GET http://localhost:8086/delivery/drivers/demo-driver
+HTTP/1.1 200 OK
+{"driverId":"demo-driver", "name":"Demo Driver", "status":"AVAILABLE"}
+```
+
+The prescribed `test-at-1.ps1` was also started against the rebuilt image and
+created order `638416f0-09a9-4721-aa30-f6d97ba4e9af`, but did not terminate
+within five minutes because its `Wait-Topic` Kafka console-consumer polling
+loop remained active. The independent order and delivery API checks above
+proved `DELIVERED`/`COMPLETED` and driver release, but the script result is
+therefore **UNVERIFIED**, not PASS.
+
+Task 2 code fix: **implemented and build/test/runtime checks passed**.
+Full scripted AT-1: **UNVERIFIED** because of the script polling timeout.
+
+## 2026-10-05 Task 2 retry diagnostic
+
+After Docker Desktop became available, the required diagnostic showed no
+currently running services when no profile was selected:
+
+```text
+docker compose -f infra\docker\docker-compose.yml ps
+NAME  IMAGE  COMMAND  SERVICE  CREATED  STATUS  PORTS
+```
+
+Using the configured delivery profile showed the previous container state:
+
+```text
+docker compose --profile all -f infra\docker\docker-compose.yml ps -a
+...delivery-db-1       Exited (137) 10 hours ago
+...delivery-service-1  Exited (143) 10 hours ago
+...delivery-db-init-1  Exited (0) 14 hours ago
+```
+
+Container inspection:
+
+```text
+delivery-service: Status=exited ExitCode=143 OOMKilled=false Health=unhealthy
+delivery-db:      Status=exited ExitCode=137 OOMKilled=false Health=unhealthy
+```
+
+The SQL Server healthcheck history returned successful authenticated
+`SELECT 1` results, and its last log entries reported normal database recovery:
+`Recovery is complete. This is an informational message only. No user action
+is required.` The delivery container had no application log output.
+
+The delivery profile was started without source changes:
+
+```text
+docker compose --profile delivery -f infra\docker\docker-compose.yml up -d
+...delivery-db-1        Healthy
+...delivery-service-1   Up (health: starting)
+...kafka-1              Healthy
+...kafka-init-1         Exited
+```
+
+After 20 seconds:
+
+```text
+...delivery-db-1        Up 2 minutes (healthy)
+...delivery-service-1   Up About a minute (healthy)
+...kafka-1              Up About a minute (healthy)
+```
+
+Kafka consumer-group check:
+
+```text
+docker exec ...kafka-1 kafka-consumer-groups --bootstrap-server kafka:9092
+  --describe --group delivery-service
+
+GROUP            TOPIC                PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG
+delivery-service orders.ready         2          1               1               0
+delivery-service orders.cancelled     2          57              57              0
+delivery-service orders.autocancelled 1          -               0               -
+delivery-service orders.cancelled     1          64              64              0
+delivery-service orders.ready         0          2               2               0
+delivery-service orders.cancelled     0          70              70              0
+delivery-service orders.ready         1          12              12              0
+delivery-service orders.autocancelled 0          -               0               -
+delivery-service orders.autocancelled 2          -               0               -
+```
+
+Every row had the same live consumer ID and zero lag.
+
+Finding: the immediate AT-1 delivery stall was caused by the delivery
+profile/runtime being stopped, not by a currently failing delivery consumer or
+SQL Server healthcheck. The delivery service then starts and consumes
+`orders.ready` successfully. A separate code/configuration issue remains for
+later work: Compose supplies only Kafka settings to delivery, while the
+current Ballerina implementation stores drivers and deliveries in process-local
+maps rather than SQL Server. No source code was changed for this diagnostic.
+
+Status: **UNVERIFIED** for the full Task 2 acceptance flow until a fresh
+`test-at-1.ps1` run observes assignment, pickup, completion, and final
+`DELIVERED` status.
+
+## 2026-10-05 Task 2 delivery diagnostic blocked
+
+Required first diagnostic:
+
+```text
+docker compose -f infra\docker\docker-compose.yml ps
+failed to connect to the Docker API at npipe:////./pipe/dockerDesktopLinuxEngine;
+check if the path is correct and if the daemon is running: open
+//./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified.
+
+docker compose -f infra\docker\docker-compose.yml logs --tail=100 delivery-service delivery-db
+failed to connect to the Docker API at npipe:////./pipe/dockerDesktopLinuxEngine;
+check if the path is correct and if the daemon is running: open
+//./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified.
+```
+
+Environment confirmation:
+
+```text
+docker version
+Client: Version 29.7.2, API version 1.55, OS/Arch windows/amd64
+Context: desktop-linux
+failed to connect to the Docker API at
+npipe:////./pipe/dockerDesktopLinuxEngine
+
+docker context ls
+desktop-linux *  Docker Desktop
+```
+
+`Get-Service com.docker.service` and the Docker Desktop process check returned
+no running service or process. Root cause is therefore currently
+**UNVERIFIED** at the application level: the Docker Desktop Linux engine is not
+running, so container health, delivery logs, SQL Server authentication,
+Kafka consumer membership, and the delivery transaction cannot be inspected.
+No delivery code was changed. Resume Task 2 from step 1 after starting Docker
+Desktop and confirming `docker info` succeeds.
+
+## 2026-10-05 Task 1 Git commit-log diagnostic
+
+Commands run before any code change:
+
+```text
+git status
+On branch dev
+Your branch is up to date with 'origin/dev'.
+Changes not staged for commit:
+  modified:   Assignment-2/services/orderService/mongo_persistence.bal
+Untracked files:
+  copilot-fix-plan.md
+
+git branch -a
+* dev
+  main
+  reviewbranch
+  reviewbranch4
+  remotes/origin/HEAD -> origin/main
+  remotes/origin/customer-service-impl
+  remotes/origin/dev
+  remotes/origin/emmanuel-feature
+  remotes/origin/emmanuel-feature-clean
+  remotes/origin/feat/grpc-proto-draft
+  remotes/origin/feat/rest-client
+  remotes/origin/feat/web-dashboard
+  remotes/origin/feature/assignment1-submission
+  remotes/origin/main
+  remotes/origin/merge-grpc-client
+  remotes/origin/reviewbranch
+  remotes/origin/reviewbranch3
+  remotes/origin/reviewbranch4
+
+git remote -v
+origin  https://github.com/Kaptain-codes/Distributed-Systems-Applications.git (fetch)
+origin  https://github.com/Kaptain-codes/Distributed-Systems-Applications.git (push)
+
+git log --oneline -n 20
+6edac61 The system
+3bda383 A few tweaks
+64a1a0c All the bugs in the scaffolding has been fixed
+da51053 Dependency regen
+8798ed4 Name change: Update .env.example to set COMPOSE_PROJECT_NAME to lowercase
+b055a12 env fix
+0616f20 Local Changes
+e422d80 hello world
+c17cab2 Merge branch 'main' of https://github.com/Kaptain-codes/Distributed-Systems-Applications
+7056017 Changes to WIlgano Databases
+a35ddd1 Create task3_service_test.bal
+1e0a390 Documentation
+96877ac Documentation
+032098f Removed .vscode
+7c2c0da Finalizing 4.0
+c40ada0 Merge pull request #9 from Kaptain-codes/feat/web-dashboard
+371392a Finalizing 3.0
+4e2e65d Finalizing 2.0
+cd1e75f Merge branch 'main' into feat/web-dashboard
+e6f8ca4 Finalize institution manager and schedule modify features
+
+git status -sb
+## dev...origin/dev
+ M Assignment-2/services/orderService/mongo_persistence.bal
+?? copilot-fix-plan.md
+
+git shortlog -sne
+[no output in this non-interactive invocation]
+
+git config user.name
+Kaptain-codes
+
+git config user.email
+wykvanhermanus@gmail.com
+
+git push --dry-run
+Everything up-to-date
+```
+
+Follow-up identity and parity checks:
+
+```text
+git shortlog -sne HEAD
+    28  Kaptain-codes <wykvanhermanus@gmail.com>
+     6  Sholm Van Wyk <thebanditinblue@gmail.com>
+     4  BlueBandit296 <thebanditinblue@gmail.com>
+     4  WilganoJL <wjldameida@gmail.com>
+     3  Wilgano D'Almeida <wjldalmeida@gmail.com>
+     2  Hermanus <wykvanhermanus@gmail.com>
+     2  Kaptain <wykvanhermanus@gmail.com>
+     1  Emmanuel Nduw <Emmanuelnduw@gmail.com>
+     1  IkuaaNdjavera <ikuaandjavera@gmail.com>
+     1  merwyan <116289704+merwyan@users.noreply.github.com>
+     1  merwyan <smerwyan@gmail.com>
+
+git rev-parse HEAD
+6edac613fbae3e8310b9f700d5b48dec3f25de05
+
+git rev-parse origin/dev
+6edac613fbae3e8310b9f700d5b48dec3f25de05
+
+git rev-list --left-right --count HEAD...origin/dev
+0  0
+```
+
+Finding: the submitted candidate appears to be branch `dev`, and it is pushed
+with identical local and remote commit IDs. The empty unqualified
+`git shortlog -sne` was caused by the non-interactive invocation; explicitly
+scoping it to `HEAD` lists the commit authors. Current Git identity is
+`Kaptain-codes <wykvanhermanus@gmail.com>`.
+
+Status: **UNVERIFIED** for ASG-12/PROC-1 because the expected roster and each
+member's platform identity were not supplied, so complete member coverage
+cannot be confirmed from repository data alone. No code, history, or existing
+working-tree changes were modified.
+
 ## 2026-10-05 revised Kafka assertion and acceptance rerun
 
 - Updated `infra/docker/scripts/at-common.ps1` so records are collected from
@@ -1193,3 +1504,523 @@ the source/build contract alignment is verified separately.
   `paymentStatus=PAID`, but exact-topic assertion failed because
   `payment.requested` appeared twice. No AT was claimed as fully passing
   unless its exact topic assertion passed.
+
+## 2026-10-05 Delivery SQL durability implementation
+
+- The delivery service was still backed by process-local driver, delivery,
+  and processed-event maps even though SQL Server was already provisioned.
+  Added `services/deliveryService/db.bal` using `ballerinax/mssql` and routed
+  those operations through SQL when `durableStateEnabled=true`. Unit tests
+  retain in-memory mode with the setting false.
+- The Compose `delivery-db-init` job previously created only the database. It
+  now mounts and applies `infra/docker/initdb/delivery-db/01-schema.sql`,
+  including the required `drivers(status, last_assigned_at)` index.
+- Driver selection uses one SQL Server `UPDATE TOP (1)` with `UPDLOCK`,
+  `READPAST`, `ROWLOCK`, and `OUTPUT`; the `deliveries.order_id` unique
+  constraint prevents duplicate delivery rows.
+- Validation: `bal build` passed and `bal test` passed with 3 passing and
+  0 failing tests.
+- Not run: a live SQL Server restart/replay/concurrency acceptance run. The
+  Docker stack was not started in this validation pass, so SQL type conversion
+  and credential/certificate behavior still need one integration run.
+- Known follow-up issue: processed-event lookup and insert are separate
+  operations. The current consumer is single-threaded, but a future
+  multi-consumer deployment should replace this with an atomic insert-and-claim
+  operation so concurrent redeliveries cannot both enter business processing.
+
+## 2026-10-05 Task 3 order creation latency
+
+- Diagnostic command: `docker compose --profile all -f
+  infra\docker\docker-compose.yml build order-service`
+  initially failed because the temporary timing code used
+  `time:utcNow().time`, which is not valid in Ballerina 2201.13.4. The timing
+  expression was corrected to use the seconds/nanoseconds tuple returned by
+  `time:utcNow()`. The corrected image build completed successfully.
+- Temporary handler timing logs were added around request validation, price
+  calculation, order state creation, Mongo snapshot/outbox persistence, and
+  Kafka publication. One request after container recreation returned HTTP 201
+  in 8039 ms. Its application timings were:
+  `customer_restaurant_validation=40.946859 ms`,
+  `price_calculation=251.722617 ms`,
+  `order_state_created=2118.277194 ms`,
+  `mongo_snapshot_outbox=2137.313651 ms`, and
+  `kafka_publish=5387.549190 ms`.
+  This first request included container/runtime warm-up contention.
+- A warmed request returned HTTP 201. Its application timings were:
+  `customer_restaurant_validation=6.528140 ms`,
+  `price_calculation=33.835915 ms`,
+  `order_state_created=47.940418 ms`,
+  `mongo_snapshot_outbox=51.818730 ms`, and
+  `kafka_publish=74.646186 ms`.
+  Therefore no persistent slow Mongo insert, outbox insert, or synchronous Kafka
+  flush was identified. The handler already records the outbox before sending
+  and uses asynchronous Kafka flush.
+- Verification command used the repository payload shape (`menuItemId` and
+  `qty`) with curl after warm-up. Ten direct orders all returned HTTP 201:
+  `0.328957, 0.296413, 0.313023, 0.343527, 0.261413, 0.327726,
+  0.290759, 0.308770, 0.255261, 0.255228` seconds. Median was
+  `0.303718` seconds and maximum was `0.343527` seconds.
+  Ten gateway orders all returned HTTP 201:
+  `0.656210, 0.425582, 0.273110, 0.295956, 0.262431, 0.264523,
+  0.306580, 0.341539, 0.298006, 0.294477` seconds. Median was
+  `0.301981` seconds and maximum was `0.656210` seconds.
+- The temporary timing logs were removed after diagnosis. The latency target
+  was met for warmed sequential requests. A first request after recreating the
+  container remains slower because of runtime/Kafka warm-up; this is recorded
+  as a known operational limitation rather than addressed with an unrelated
+  asynchronous behavior change.
+
+## 2026-10-05 Session 2 delivery SQL durability handoff
+
+### Scope
+
+Delivery-service SQL persistence, driver claiming, duplicate `orders.ready`
+handling, and processed-event durability.
+
+### Files changed
+
+- `services/deliveryService/db.bal`
+- `services/deliveryService/kafka_runtime.bal`
+- `debug.md`
+
+### Implementation
+
+- Added `dbCreateDeliveryIfAbsent`, using
+  `INSERT ... SELECT ... WHERE NOT EXISTS` with
+  `UPDLOCK, HOLDLOCK` on `deliveries.order_id`. The function returns whether
+  this consumer created the delivery.
+- Duplicate READY consumers now release the driver selected by the losing
+  consumer instead of leaving it BUSY. Persistence errors also attempt to
+  release the selected driver before retrying the Kafka record.
+- Existing SQL driver claiming remains
+  `UPDATE TOP (1) ... WITH (UPDLOCK, READPAST, ROWLOCK) ... OUTPUT`, which
+  atomically transitions one AVAILABLE driver to BUSY.
+- Existing unique `deliveries.order_id` and `processed_events.event_id`
+  constraints remain in `infra/docker/initdb/delivery-db/01-schema.sql`.
+
+### Commands/tests
+
+- `Set-Location Assignment-2/services/deliveryService; bal build` — PASS.
+- `Set-Location Assignment-2/services/deliveryService; bal test` — PASS,
+  3 passing, 0 failing.
+- `docker info --format '{{.ServerVersion}}'` — Docker Server 29.7.2
+  available.
+- `docker compose --profile delivery -f infra/docker/docker-compose.yml ps` —
+  delivery DB and service healthy.
+- Re-ran `delivery-db-init`; SQL output included `Changed database context to
+  'delivery'`.
+- SQL verification after initialization returned zero rows for each of
+  `drivers`, `deliveries`, and `processed_events`, proving the tables were
+  queryable.
+- Direct two-session SQL probe using the guarded insert ran concurrently for
+  the same order. Result: `matching_deliveries = 1`; session 1 affected 1 row
+  and session 2 affected 0 rows.
+- `git diff --check` — no whitespace errors.
+
+### Concrete runtime evidence and limitation
+
+The running `delivery-service` container's `BAL_CONFIG_DATA` contains only
+`kafkaRuntimeEnabled` and `kafkaBootstrap`; it does not set
+`durableStateEnabled = true` or the SQL host/database/user/password.
+`GET /delivery/drivers/demo-driver` returned the process-local demo driver,
+and the SQL database initially had no application tables until the
+initializer was rerun. Therefore live delivery restart/replay persistence
+was not demonstrated by the running service.
+
+**HANDOFF REQUIRED — Session 4:** update the delivery-service Compose
+environment to enable SQL durability and provide the delivery SQL connection
+settings. Do not treat the current healthy container as proof of SQL-backed
+runtime behavior.
+
+### Result
+
+**HANDOFF REQUIRED** overall: delivery code build/tests and the SQL guarded
+insert concurrency probe passed, but application-level SQL restart/replay and
+duplicate READY verification remain blocked until Compose wires the SQL
+configuration. Driver claim SQL semantics were directly inspected; a
+multi-service live claim test was not run.
+
+### Remaining risks
+
+- `dbEventProcessed` lookup and `dbMarkEvent` insert remain separate. The
+  unique event constraint prevents duplicate rows, but a future multi-consumer
+  race can still perform duplicate business work before the insert conflict is
+  observed. The guarded unique delivery insert prevents duplicate delivery
+  rows and releases the losing driver, but duplicate publication attempts
+  should be verified after SQL durability is enabled.
+- If a process fails after delivery insertion and before Kafka publication,
+  the delivery row and BUSY driver remain durable while the input event is
+  retried; replay behavior should be certified in the final integration pass.
+
+  ## 2026-10-05 Session 5 documentation/configuration/security hygiene handoff
+
+  Scope: documentation and configuration-template hygiene only. No Compose,
+  Dockerfile, script, service, acceptance-test, or `infra/docker/.env` files were
+  modified.
+
+  Files changed:
+
+  - `Assignment-2/README.md`
+  - `Assignment-2/infra/docker/README.md`
+  - `Assignment-2/infra/docker/.env.example`
+
+  Changes:
+
+  - Documented the actual database mapping from Compose: order MongoDB; customer,
+    restaurant, and payment MySQL; notification and admin MongoDB; delivery SQL
+    Server.
+  - Replaced fragile README line-number anchors with stable file/service links.
+  - Documented host Kafka access as `localhost:29092` and container access as
+    `kafka:9092`.
+  - Added Compose prerequisites, Docker Desktop memory guidance, connection
+    tables, MySQL credential troubleshooting, and explicit `.env` submission
+    hygiene.
+  - Replaced the hard-coded Compose volume-name guidance with volume discovery
+    and the reset-script recommendation.
+  - Removed the inappropriate `.env.example` wording and retained placeholders
+    only; no real credentials were read or copied.
+  - Updated the `infra/k8s` wording to describe the present files as unverified
+    deployment scaffolds rather than an empty directory.
+
+  Verification commands:
+
+  ```text
+  git status --short
+  git diff --check
+  docker compose --env-file .env.example -f docker-compose.yml config --quiet
+  ```
+
+  Results:
+
+  - Documentation/configuration scope: **PASS** — targeted diff and `git diff
+    --check` completed without whitespace errors.
+  - Compose syntax/configuration check: **PASS** — command completed with no
+    output from `Assignment-2\infra\docker`.
+  - Full application/runtime behavior: **UNVERIFIED** — owned by the other
+    sessions and final integration pass.
+
+## 2026-10-05 Session 2 MSSQL driver packaging follow-up
+
+### Scope
+
+Resolve the runtime failure exposed when Session 4 enabled the delivery
+service's SQL configuration.
+
+### Files changed
+
+- `services/deliveryService/db.bal`
+- `services/deliveryService/Dependencies.toml` (regenerated by Ballerina)
+- `debug.md`
+
+### Root cause and fix
+
+The delivery package imported `ballerinax/mssql` but did not bundle its JDBC
+driver. The SQL-enabled container therefore exited with:
+
+```text
+Error while loading database driver. This may be because the database driver
+path is not configured correctly in the Ballerina.toml file or provided
+database driver version is not supported by the connector
+```
+
+Added the documented blank import:
+
+```ballerina
+import ballerinax/mssql.driver as _;
+```
+
+Ballerina resolved `ballerinax/mssql.driver:1.7.1` and regenerated the lock
+file entries.
+
+### Verification
+
+- `bal build` — **PASS**; executable generated successfully.
+- `bal test` — **PASS**; 3 passing, 0 failing.
+- `docker compose -f infra/docker/docker-compose.yml config --quiet` —
+  **PASS**.
+- Delivery image rebuild — **PASS**.
+- Recreated delivery service with SQL settings enabled — **PASS**.
+- Post-restart runtime — `delivery-service|running|healthy`.
+- `GET http://localhost:8086/delivery/health` — returned
+  `{"status":"UP","service":"delivery"}`.
+- Created driver `SQL Durable Test` through the delivery API, restarted only
+  `delivery-service`, and successfully fetched the same driver afterward.
+  This directly demonstrates SQL-backed driver persistence across service
+  restart.
+- SQL query against the delivery database showed `processed_events` rows
+  present after startup/replay activity.
+- `git diff --check` — no whitespace errors.
+
+### Result
+
+**PASS** for the MSSQL driver packaging defect and SQL-backed driver restart
+durability. Full duplicate READY/replay business-flow verification remains
+**UNVERIFIED** and belongs in the final integration pass.
+
+### Remaining risks
+
+- Processed-event lookup and insertion are still separate operations, so
+  concurrent consumers can race before the unique constraint rejects a
+  duplicate insert.
+- A crash between delivery insertion and event publication still needs
+  explicit replay verification.
+  - Compose implementation correctness: **HANDOFF REQUIRED** if Session 4
+    changes database mappings, ports, listeners, or profiles; these documents
+    currently reflect the working-tree Compose and `.env.example`.
+  - Kubernetes scaffold accuracy: **UNVERIFIED** — existing `infra/k8s`
+    manifests/scaffold were not modified because deployment architecture is
+    outside this documentation pass.
+
+  Remaining documentation issues:
+
+  - `infra/k8s/deploymentScaffold.md` contains OCI-specific planning and a
+    `localhost:9092` external Kafka reference that is not the Docker Compose
+    host mapping; it needs an explicitly scoped deployment-documentation review.
+  - Other historical findings in `debug.md` remain evidence for the final
+    integration pass and are not claims of current documentation failure.
+
+  ## 2026-10-05 Session 5 follow-up after Session 4 handoff
+
+  Session 4 confirmed that the current Compose implementation uses the documented
+  Kafka split (`localhost:29092` for host clients and `kafka:9092` for
+  containers), loopback-bound published ports, and `all` as the no-argument
+  start/stop profile. The documentation remains consistent with those verified
+  changes.
+
+  One stale root README architecture-diagram port range was corrected from
+  `1434-1437` to `3307-3309, 1437`, matching `.env.example` and Compose:
+  MySQL host ports 3307-3309 and SQL Server host port 1437.
+
+  Result: **PASS** for the documentation reconciliation. Full application and
+  acceptance behavior remains **UNVERIFIED** pending the final integration pass.
+
+## 2026-10-05 Session 1 — Order Service remaining verification
+
+Scope: Order Service persistence, Mongo interaction, latency, durable outbox
+behavior, cancellation rules, and Order Service build/tests. No files owned by
+the infrastructure, delivery, or acceptance-harness workstreams were changed.
+
+Commands and evidence:
+
+```text
+cd Assignment-2\services\orderService
+bal build
+bal test
+```
+
+- Build succeeded and generated `target\bin\orderService.jar`.
+- Tests passed: 7 passing, 0 failing, 0 skipped.
+
+A fresh 30-pair direct run used the repository request shape
+(`menuItemId` and `qty`) against `http://localhost:8081/order/orders`.
+All 30 creates returned HTTP 201 and all 30 cancellations returned HTTP 201
+with `CANCELLED`. Measured results:
+
+- Create median: 318.5 ms; create maximum: 436.2 ms.
+- Cancel median: 298.4 ms; cancel maximum: 353.6 ms.
+- The wrapper reported 30 failures only because it searched for compact
+  `"status":"CANCELLED"` JSON while the service formats the response as
+  `"status": "CANCELLED"`. Each printed pair showed `cancelStatus=201`; no
+  HTTP or business failure occurred.
+
+The dedicated 20-parallel READY script
+`infra/docker/scripts/test-at-duplicate-ready.ps1` failed before duplicate
+READY injection because `orders.confirmed` was not observed. This is an
+upstream restaurant/payment progression failure; the script did not reach the
+20-record duplicate assertion.
+
+The narrower Order Service concurrent-duplicate script
+`infra/docker/scripts/test-order-concurrent-duplicates.ps1` could not complete
+because its Kafka group-offset probe invokes `kafka-consumer-groups` with
+`--bootstrap-server localhost:9092` from inside the Kafka container and
+returned a native Docker/PowerShell error. The Order Service was recreated by
+the script and remained healthy afterward. This harness defect is outside
+Session 1 ownership.
+
+Result: **PASS** for Order Service build/tests, direct 30-pair latency, and
+cancellation behavior. **UNVERIFIED** for the 20-parallel duplicate READY
+business regression because the test did not reach injection. **HANDOFF
+REQUIRED — Session 3** for the acceptance-script Kafka bootstrap/offset probe;
+the upstream `orders.confirmed` progression also requires the owning service
+workstream's investigation.
+
+Remaining work:
+
+- Correct the acceptance script's in-container Kafka bootstrap/offset command
+  and rerun the focused concurrent duplicate test.
+- Rerun the 20-parallel READY test after resolving the missing
+  `orders.confirmed` progression.
+- Complete the final integration pass and AT-1 through AT-5 certification.
+
+## 2026-10-05 Session 1 — follow-up on missing orders.confirmed
+
+The acceptance failures were narrowed to the Order Service Kafka consumer
+runtime, not the HTTP health endpoint or the transition implementation.
+
+Evidence:
+
+- Kafka contained `restaurant.accepted` records for the failed test orders,
+  including the order used by the duplicate-READY attempt.
+- The `order-service` consumer group had no active members and non-zero lag on
+  `restaurant.accepted`; the container itself remained HTTP-healthy.
+- The Order Service process was still running, but its environment contained
+  duplicate `durableStateEnabled = true` entries in `BAL_CONFIG_DATA`.
+- The container emitted the Ballerina warning `invalid TOML file` with
+  `existing node 'durableStateEnabled'`.
+- The same duplicate configuration entries are present in the working-tree
+  `infra/docker/docker-compose.yml` at the Order Service environment block.
+
+This prevents reliable startup of the configured Kafka consumer and explains
+why `restaurant.accepted` remains unconsumed and no derived
+`payment.requested`/`orders.confirmed` progression is observed. The Order
+Service source transition path already handles `restaurant.accepted` and
+publishes `payment.requested`; no source change was justified by this
+evidence.
+
+Result: **HANDOFF REQUIRED — Session 4** to remove the duplicate
+`durableStateEnabled` Compose setting and recreate the Order Service. After
+that infrastructure correction, Session 1/3 should rerun AT-1 through AT-5
+and the 20-parallel READY test. No secret values are recorded here.
+
+## 2026-10-05 Session 1 — AT-5 cancellation publication follow-up
+
+The sequential AT-5 handoff reported a missing run-scoped `orders.cancelled`
+record for order `fdd0ba04-992f-4473-92a3-9e3f041e2d18`. Order Service state
+and Kafka history were inspected without changing the acceptance harness.
+
+Observed state for that order:
+
+- Direct Order Service and gateway reads both returned `status=CANCELLED`,
+  `cancellationType=CUSTOMER`, `paymentStatus=PAID`, version `4`.
+- `orders.created`, `restaurant.accepted`, `payment.requested`,
+  `orders.confirmed`, and `payments.refunded` records were present.
+- The cancellation state was durably persisted, but the harness's immediate
+  topic collection did not observe `orders.cancelled`.
+
+A fresh direct probe then created order
+`c46ad646-3d82-4fd0-a837-c0dfa729b5ee` and cancelled it. Cancellation returned
+HTTP 201 with `CANCELLED`; after a five-second wait, partition-scoped Kafka
+inspection found the matching `orders.cancelled` record. The Order Service
+container remained healthy with zero restarts.
+
+Conclusion: **PASS** for Order Service cancellation persistence and eventual
+event publication. The failed AT-5 result is an acceptance timing race: the
+HTTP cancellation response can precede completion of asynchronous Kafka flush,
+while the durable outbox remains available for recovery. **HANDOFF REQUIRED —
+Session 3** if AT-5 needs to wait for the expected cancellation topic before
+collecting the exact topic set. No Order Service source change is justified by
+this evidence; removing asynchronous publication would regress the measured
+latency and is not required for durability.
+
+## 2026-10-05 Session 3 acceptance harness hardening and live results
+
+Session 3 changed only these acceptance files:
+
+- `infra/docker/scripts/at-common.ps1`
+- `infra/docker/scripts/test-at-duplicate-ready.ps1` (new)
+
+Harness assertions now prove the following:
+
+- Kafka records are matched by parsed envelope `orderId`/`correlationId`, not
+  by an arbitrary textual occurrence of the UUID.
+- Records must have a Kafka timestamp at or after the test's run start. This
+  prevents a stale record from an earlier run from satisfying `Wait-Topic` or
+  `Assert-Topics`.
+- A matching record without an `eventId` fails. Repeated records with one
+  event ID are explicitly reported as same-event-ID redelivery and tolerated.
+  More than one event ID on one topic for the same order fails as different
+  event IDs representing duplicate business events.
+- The exact distinct topic set must equal the script's expected set; missing
+  and unexpected topics fail. The first record per topic is used for
+  nondecreasing causal Kafka timestamp ordering.
+- The new duplicate-READY script publishes 20 copies of one
+  `restaurant.ready` event ID concurrently using distinct Kafka keys, then
+  requires at least 20 injected records with exactly one event ID and exactly
+  one derived `orders.ready` event ID.
+
+Validation performed:
+
+```text
+PowerShell parse PASS (19 scripts)
+git diff --check PASS
+docker info: server 29.7.2
+docker compose ps: full stack healthy
+```
+
+Live sequential acceptance results (no scripts were run concurrently):
+
+```text
+AT-1 orderId=9cb12c82-c4f0-40ab-8b9e-1b75eb1d4ca4
+FAIL AT-1: orders.confirmed not observed
+
+AT-2 orderId=aec96cd3-0cb7-45a6-8959-242408f2f064
+FAIL AT-2: payments.failed not observed
+
+AT-3 orderId=d6dd648c-22bb-464b-a30e-1c7fda50ccb7
+FAIL AT-3: restaurant reject failed: 409 INVALID_STATE
+
+AT-4 orderId=fe77e1c1-69ac-4b8a-b88d-d4ebb41aadf7
+FAIL AT-4: orders.confirmed not observed
+
+AT-5 orderId=edb44d87-b3b0-4bd7-9e6e-32af241def02
+FAIL AT-5: orders.confirmed not observed
+
+AT-DUPLICATE-READY orderId=b0994eb2-3f98-4608-b618-35d5af5c23b3
+FAIL AT-DUPLICATE-READY: orders.confirmed not observed
+```
+
+Classification:
+
+- AT-1: **HANDOFF REQUIRED — Session 1**. The order did not produce
+  `orders.confirmed`; delivery code was not changed.
+- AT-2: **HANDOFF REQUIRED — Session 1**. The payment-failure event was not
+  observed after order creation/acceptance.
+- AT-3: **HANDOFF REQUIRED — Session 1**. Restaurant rejection returned
+  `409 INVALID_STATE` before the exact topic assertion.
+- AT-4: **HANDOFF REQUIRED — Session 1**. The order did not produce
+  `orders.confirmed`; no-driver assertions were not reached.
+- AT-5: **HANDOFF REQUIRED — Session 1**. The order did not produce
+  `orders.confirmed`; cancellation assertions were not reached.
+- 20-parallel duplicate READY: **UNVERIFIED / HANDOFF REQUIRED — Session 1**.
+  The regression did not reach injection because `orders.confirmed` was
+  absent. No application code was modified by Session 3.
+
+No AT-1 through AT-5 script passed its complete acceptance criteria. The
+failures are application-flow failures observed before the Kafka assertion
+stage, not reasons to weaken topic, event-ID, isolation, or ordering checks.
+
+## 2026-10-05 Session 3 AT-5 asynchronous cancellation publication fix
+
+The previous AT-5 order
+`fdd0ba04-992f-4473-92a3-9e3f041e2d18` was durably `CANCELLED`, but the
+asynchronous `orders.cancelled` publication was not visible when the script
+immediately collected the Kafka topic set. A focused direct probe confirmed
+that the event appeared after a short wait.
+
+`infra/docker/scripts/test-at-5.ps1` now explicitly waits for the
+run-scoped `orders.cancelled` record after confirming the order is
+`CANCELLED`, before calling `Finish-At`. This preserves exact topic, event-ID,
+stale-record, and causal-order assertions; it does not weaken them.
+
+Validation:
+
+```text
+PowerShell parse: PASS
+git diff --check: PASS
+```
+
+Fresh AT-5 result:
+
+```text
+orderId=e1cf907d-8540-41d7-a14c-030ef729c119
+distinct topics=orders.cancelled,orders.confirmed,orders.created,
+payment.requested,payments.completed,payments.refunded,restaurant.accepted
+redelivered duplicates: none
+PASS distinct topics, one eventId per topic, and causal timestamp ordering
+final status=CANCELLED paymentStatus=PAID cancellationType=CUSTOMER
+PASS AT-5 duration=00:06:23.3194474
+```
+
+Classification: **PASS** for AT-5. The prior failure was an acceptance
+timing race around asynchronous outbox publication, not a lost cancellation
+event or an application persistence failure.

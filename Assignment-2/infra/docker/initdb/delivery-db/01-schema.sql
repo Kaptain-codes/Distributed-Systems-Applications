@@ -12,3 +12,6 @@ CREATE TABLE deliveries (id UNIQUEIDENTIFIER PRIMARY KEY, order_id UNIQUEIDENTIF
   assigned_at DATETIME2 NULL, completed_at DATETIME2 NULL, failure_reason NVARCHAR(255) NULL);
 IF OBJECT_ID('dbo.processed_events', 'U') IS NULL
 CREATE TABLE processed_events (event_id UNIQUEIDENTIFIER PRIMARY KEY, processed_at DATETIME2 NOT NULL);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'ix_drivers_status_last_assigned_at'
+  AND object_id = OBJECT_ID('dbo.drivers'))
+CREATE INDEX ix_drivers_status_last_assigned_at ON drivers(status, last_assigned_at);

@@ -6,6 +6,7 @@ distribution = "2201.13.4"
 
 [dependencies]
 "ballerinax/kafka" = "4.6.6"
+"ballerinax/mssql" = "1.19.1"
 
 [build-options]
 observabilityIncluded = true

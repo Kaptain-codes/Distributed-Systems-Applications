@@ -11,5 +11,6 @@ try {
     if ($cancel.Status -notin @(200,201)) { throw "cancel failed: $($cancel.Status) $($cancel.Raw)" }
     $order = Wait-Order $id @("CANCELLED")
     if ($order.status -ne "CANCELLED") { throw "final status is $($order.status)" }
+    if (!(Wait-Topic $id "orders.cancelled")) { throw "orders.cancelled not observed after cancellation" }
     Finish-At "AT-5" $id $order $expected $started
 } catch { Write-Output "FAIL AT-5: $($_.Exception.Message)"; exit 1 }
