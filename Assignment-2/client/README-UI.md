@@ -14,9 +14,10 @@ Set-Location Assignment-2\client
 python -m http.server 5500
 ```
 
-Open `http://localhost:5500`. The default gateway base URL is
-`http://localhost:9090/api`; change it in the header or Settings when the
-gateway is exposed elsewhere.
+Open `http://localhost:5500`. The UI specification default gateway base URL is
+`http://localhost:9090/api`. The repository Docker Compose configuration maps
+the gateway to `http://localhost:8080/api`, so change the header or Settings
+to that value when using Compose.
 
 ## Customer identity
 
@@ -48,3 +49,7 @@ CONFIRMED; after that the backend's 409 invalid-state response is surfaced.
   raw contract responses when an expected ID is missing.
 - The backend must provide CORS access when the static server and gateway have
   different origins.
+- The current customer service address contract rejects the locked UI address
+  payload (`label`, `region`, and `is_default`). Until that backend contract is
+  aligned with `ui.md`, registration stops at the address-only retry sheet and
+  order placement cannot complete.
