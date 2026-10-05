@@ -21,16 +21,22 @@ public type CustomerInput record {|
 public type Address record {|
     string id;
     string customerId;
+    string? label = ();
     string line1;
     string city;
     string country;
+    string? region = ();
+    boolean? is_default = ();
     string? postalCode = ();
 |};
 
 public type AddressInput record {|
+    string? label = ();
     string line1;
     string city;
-    string country;
+    string? country = ();
+    string? region = ();
+    boolean? is_default = ();
     string? postalCode = ();
 |};
 
@@ -94,13 +100,15 @@ service /customer on new http:Listener(9090) {
         if !customers.hasKey(id) {
             return failure("NOT_FOUND", "customer not found", 404);
         }
-        if !validText(input.line1) || !validText(input.city) || !validText(input.country) {
+        string country = input.country ?: input.region ?: "";
+        if !validText(input.line1) || !validText(input.city) || !validText(country) {
             return failure("VALIDATION_ERROR", "address fields are required", 400);
         }
         string addressId = "addr-" + nextAddressId.toString();
         nextAddressId += 1;
         Address address = {id: addressId, customerId: id, line1: input.line1.trim(),
-            city: input.city.trim(), country: input.country.trim(), postalCode: input.postalCode};
+            label: input.label, city: input.city.trim(), country: country.trim(),
+            region: input.region, is_default: input.is_default, postalCode: input.postalCode};
         Address[] existing = customerAddresses[id] ?: [];
         existing.push(address);
         customerAddresses[id] = existing;

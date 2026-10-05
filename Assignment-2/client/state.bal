@@ -19,9 +19,15 @@ function loadState() returns ClientState {
 }
 
 function saveState(ClientState state) returns error? {
-    error? directoryResult = file:createDir(stateDirectory);
-    if directoryResult is error {
-        return directoryResult;
+    boolean|error directoryExists = file:test(stateDirectory, file:EXISTS);
+    if directoryExists is error {
+        return directoryExists;
+    }
+    if !directoryExists {
+        error? directoryResult = file:createDir(stateDirectory);
+        if directoryResult is error {
+            return directoryResult;
+        }
     }
     return io:fileWriteString(statePath, state.toJsonString());
 }

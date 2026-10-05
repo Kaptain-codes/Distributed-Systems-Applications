@@ -1,4 +1,144 @@
-# debug.md - Assignment 2 infra audit
+# Assignment 2 Comprehensive Debug Record
+
+> Canonical debugging, verification, and handoff record for the distributed
+> food-delivery application. Historical evidence is retained below; no result
+> is upgraded from `UNVERIFIED`, `BLOCKED`, or `FAIL` without a new run.
+
+## Current verdict
+
+**Overall: NOT FULLY CERTIFIED.** The repository has several directly verified
+fixes, but a stable full-stack acceptance run has not certified every required
+scenario.
+
+| Area | Current result | Evidence or remaining boundary |
+| --- | --- | --- |
+| Order Service build/tests | **PASS** | Ballerina build/tests pass; cancellation and durable outbox behavior are covered below. |
+| Delivery Service build/tests | **PASS** | Build/tests and duplicate `READY` handling pass; crash-boundary replay remains unverified. |
+| Infrastructure and Compose | **PASS** | Compose validation, healthchecks, profiles, Kafka listeners, and consumer diagnostics pass. |
+| Acceptance harness | **PASS for harness changes** | Offset-based run scoping, bounded polling, and exact assertions pass static validation. |
+| AT-5 cancellation | **PASS** | Fresh run observed `orders.cancelled` and terminal `CANCELLED`. |
+| AT-1, AT-2, AT-3, AT-4 full certification | **UNVERIFIED/BLOCKED** | Earlier runs were interrupted by gateway timeouts, service readiness, or Docker resource pressure. |
+| Browser UI | **PARTIAL** | Static/browser checks pass; address contract mismatch and order-service readiness block the full journey. |
+| Security hygiene | **PASS with restrictions** | Do not commit or share `Assignment-2\infra\docker\.env`; use redacted values only. |
+
+## Evidence status legend
+
+- **PASS** — directly demonstrated by a recorded command or runtime check.
+- **FAIL** — directly demonstrated failure.
+- **UNVERIFIED** — not enough evidence to claim success.
+- **BLOCKED** — environment or tooling prevented verification.
+- **HANDOFF REQUIRED** — another workstream owns the required change or rerun.
+
+## Consolidated source map
+
+The following debug-only documents were consolidated into this file:
+
+| Former document | Consolidated scope |
+| --- | --- |
+| `debugPlan.md` | Workstream ownership, evidence rules, integration procedure, and exit criteria. |
+| `debug-session-1.md` | Order Service persistence, cancellation, latency, outbox, and consumer-health evidence. |
+| `debug-session-2.md` | Delivery SQL durability, driver claiming, duplicate replay, and remaining crash-boundary risks. |
+| `debug-session-3.md` | Acceptance harness offset scoping, bounded Kafka polling, and AT-5 timing fix. |
+| `debug-session-4.md` | Compose profiles, Kafka networking, scale override, consumer liveness, and healthcheck hardening. |
+| `debug-session-5.md` | Documentation/configuration reconciliation and deployment caveats. |
+| `ConcurrencyDebug.md` | Why shared-state acceptance scenarios remain sequential. |
+| `client\webDebug.md` | Browser/UI matrix, CORS verification, and backend contract blockers. |
+| `confirmation.md` | Cross-check of the original audit against the current worktree. |
+| `docs\debug-index.md` | Chronological evidence index, now represented by this record and its dated headings. |
+
+The client specification in [`client.md`](client.md), UI specification in
+[`ui.md`](ui.md), architecture documents, requirements, and deployment
+documentation remain authoritative specifications—not duplicate debug logs.
+
+## Reproduction and final-certification checklist
+
+Run from `Assignment-2` on a stable Docker Desktop engine:
+
+```powershell
+git status --short
+git diff --check
+docker compose -f infra\docker\docker-compose.yml config --quiet
+bal build
+bal test
+```
+
+Then run the required integration sequence without sharing mutable state
+between scenarios:
+
+1. Start the required Compose profile with `infra\docker\scripts\start-dev.ps1`.
+2. Verify service health, Kafka consumer membership, and zero lag with
+   `infra\docker\scripts\check-consumers.ps1`.
+3. Run AT-1 through AT-5 sequentially, recording order-scoped event IDs and
+   terminal API state for each run.
+4. Run the duplicate-`READY` regression, including the two-consumer scale
+   profile where applicable.
+5. Verify delivery restart/replay, driver release after completion, and the
+   SQL claim-concurrency harness.
+6. Re-run the browser matrix from `client\README-UI.md`, including the
+   address-contract path.
+7. Record median, p95, and maximum latency only from a complete, stable
+   sample; do not use the interrupted resource-pressure sample.
+
+Never paste credentials into this file. Redact passwords as `<redacted>` and
+never submit `infra\docker\.env`.
+
+## Cross-workstream findings
+
+### Verified fixes
+
+- Order completion releases the assigned driver back to `AVAILABLE`.
+- Durable order outbox recovery is age-gated to avoid immediate duplicate
+  publication while asynchronous Kafka flush callbacks are pending.
+- Order event IDs remain deterministic and duplicate claims are guarded.
+- Delivery SQL driver claims use guarded locking and persisted assignment
+  markers.
+- Kafka run membership is based on partition offsets rather than host/container
+  clock comparisons.
+- Kafka polling in the acceptance harness is bounded and reports useful timeout
+  context.
+- AT-5 waits for asynchronous `orders.cancelled` publication without weakening
+  event-ID, topic, or causal-order assertions.
+- Compose uses container-network Kafka address `kafka:9092` and host address
+  `localhost:29092`; published ports are loopback-bound.
+- HTTP healthchecks use a client-side timeout so a hung `curl` cannot outlive
+  Docker's healthcheck process.
+- The consumer diagnostic reports active members and lag; the scale override
+  supports two delivery replicas without a fixed-port collision.
+- Gateway CORS works for the documented local UI origins.
+- UI rendering avoids fabricated entity IDs and unsafe `innerHTML` output.
+
+### Open blockers and risks
+
+- The customer service rejects the locked UI address payload fields
+  `label`, `region`, and `is_default`; the contract must be aligned before
+  browser order registration can complete.
+- Order Service has historically become slow or unresponsive under Docker
+  resource pressure. A stable 30-pair direct and 10-pair gateway latency
+  certification is still required.
+- Full AT-1 through AT-4 certification was not completed in the recorded
+  unstable windows. Do not infer success from direct probes.
+- SQL and Kafka are not one transaction. A crash after publication but before
+  `assigned_published=1` can republish the same deterministic event ID; event
+  consumers must remain idempotent.
+- Crash-between-SQL-and-Kafka replay has not been live-proven with a targeted
+  crash hook.
+- The Kubernetes deployment scaffold contains OCI/external-Kafka assumptions
+  outside the Compose verification scope.
+
+## Workstream ownership for future reruns
+
+| Workstream | Scope | Do not claim beyond |
+| --- | --- | --- |
+| Order | `services\orderService\**` | Service tests and measured probes do not certify full acceptance. |
+| Delivery | `services\deliveryService\**`, delivery SQL harness | Duplicate replay evidence does not prove crash-boundary recovery. |
+| Acceptance | `infra\docker\scripts\test-at-*.ps1` | Harness correctness does not prove application-flow success. |
+| Infrastructure | Compose, Docker, profiles, runtime scripts | Healthy containers do not prove business-event correctness. |
+| Client/UI | `client\*` | Browser checks do not replace backend contract or acceptance tests. |
+
+---
+
+The dated sections below preserve the detailed command output, measurements,
+and historical diagnoses that support the summary above.
 
 ## 2026-10-05 Task 2 fix and verification
 
@@ -2024,3 +2164,64 @@ PASS AT-5 duration=00:06:23.3194474
 Classification: **PASS** for AT-5. The prior failure was an acceptance
 timing race around asynchronous outbox publication, not a lost cancellation
 event or an application persistence failure.
+
+## 2026-10-05 Session 1 Order Service consumer-stall follow-up
+
+The remaining Order Service runtime instability was narrowed to Kafka consumer
+group timing. The scheduled consumer job performs Mongo persistence, retries,
+and Kafka publication in the poll task. It previously fetched up to 10 records
+per poll and did not set explicit Kafka timing values. Under Docker contention,
+Kafka removed the member and repeatedly rebalanced the `order-service` group;
+the service could remain running while `/order/health` timed out.
+
+Order Service-only change:
+
+- `services/orderService/kafka_consumer.bal`
+  - `maxPollRecords` reduced from 10 to 1 so one scheduled poll cannot batch
+    multiple long-running record handlers.
+  - `sessionTimeout` set to 30000 ms.
+  - `heartBeatInterval` set to 10000 ms.
+  - `maxPollInterval` set to 120000 ms to cover the observed Mongo/Kafka
+    processing duration while retaining bounded consumer failure detection.
+  - Existing topics, manual commit behavior, durable outbox, event contracts,
+    and poll-overlap guard were unchanged.
+
+Validation:
+
+```text
+bal build: PASS
+bal test: PASS (9 passing, 0 failing, 0 skipped)
+```
+
+After rebuilding and recreating only Order Service:
+
+```text
+container: running|healthy|restartCount=0
+```
+
+Twelve health probes at 10-second intervals all completed successfully:
+
+```text
+12/12: HTTP success, status=UP, kafkaConsumerReady=true
+probe durations: 2.89s, 2.99s, 3.06s, then 4.02-4.08s
+```
+
+Kafka consumer-group inspection showed one stable member
+`consumer-order-service-1-170b5fae-b088-4d62-81bf-e2b083fc8c41` and no
+coordinator/rebalance errors in the observation window. Group lag was present
+on pre-existing records but did not prevent readiness or health responses.
+
+Functional direct probe on the rebuilt service:
+
+```text
+create: HTTP 201, 11.21s
+cancel: HTTP 201, 7.89s, status=CANCELLED
+repeat cancel: HTTP 409, error=INVALID_STATE
+```
+
+Classification: **PASS** for the consumer-stall fix and cancellation state
+behavior under this observation window. A full 30-pair latency sample, ten
+gateway pairs, five cold-start comparisons, and complete AT-5 rerun remain
+**UNVERIFIED** because the shared Docker/Kafka environment has previously
+experienced resource-pressure exits. Those measurements should be rerun by
+the acceptance/infrastructure workstreams after the stack remains stable.

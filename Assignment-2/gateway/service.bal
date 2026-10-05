@@ -20,6 +20,21 @@ final http:Client adminClient = check new (adminService, {timeout: downstreamTim
 final http:Client deliveryClient = check new (deliveryService, {timeout: downstreamTimeout});
 final http:Client restaurantClient = check new (restaurantService, {timeout: downstreamTimeout});
 
+@http:ServiceConfig {
+    cors: {
+        allowOrigins: [
+            "http://localhost:5500",
+            "http://localhost:5502",
+            "http://127.0.0.1:5500",
+            "http://127.0.0.1:5502"
+        ],
+        allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allowHeaders: ["Accept", "Content-Type", "Idempotency-Key", "X-Driver-Id"],
+        exposeHeaders: ["Content-Type"],
+        allowCredentials: false,
+        maxAge: 3600
+    }
+}
 service /api on new http:Listener(port) {
     resource function get health() returns json {
         return {status: "UP", 'service: "gateway"};

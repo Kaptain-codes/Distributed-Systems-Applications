@@ -1,5 +1,79 @@
+import ballerina/http;
 import ballerina/io;
 import ballerina/lang.runtime;
+
+configurable string baseUrl = "http://localhost:9090/api";
+configurable int pollMs = 2000;
+configurable boolean autoRegister = true;
+configurable boolean idempotencyEnabled = false;
+configurable int httpTimeoutSeconds = 3;
+
+final http:Client apiClient = check new (baseUrl, {
+    timeout: <decimal>httpTimeoutSeconds
+});
+
+type ApiResult record {|
+    int status;
+    json body;
+    string url;
+|};
+
+type ClientState record {|
+    string? customerId = ();
+    string? addressId = ();
+    json? address = ();
+    string baseUrl = "http://localhost:9090/api";
+    int pollMs = 2000;
+    string? activeOrderId = ();
+    json[] drivers = [];
+|};
+
+function printJson(json value) {
+    io:println(value.toJsonString());
+}
+
+function printList(json value, string title) {
+    io:println("\n" + title);
+    if value is json[] {
+        int index = 1;
+        foreach json item in value {
+            io:println(string `${index}. ${item.toJsonString()}`);
+            index += 1;
+        }
+    } else {
+        printJson(value);
+    }
+}
+
+function printOrder(json orderData) {
+    string orderId = fieldText(orderData, "orderId", "id", "_id");
+    string status = fieldText(orderData, "status");
+    string paymentStatus = fieldText(orderData, "paymentStatus");
+    io:println(string `\norder ${orderId}  status=${status}  payment=${paymentStatus}`);
+    io:println("[✓] CREATED  [✓] CONFIRMED  [▶] " + status +
+        "  [ ] READY  [ ] OUT_FOR_DELIVERY  [ ] DELIVERED");
+    if orderData is map<json> && orderData["cancellationReason"] is string {
+        io:println("CANCELLED: " + <string>orderData["cancellationReason"]);
+    }
+}
+
+function fieldText(json value, string... names) returns string {
+    if value is map<json> {
+        foreach string name in names {
+            json? candidate = value[name];
+            if candidate is string {
+                return candidate;
+            }
+            if candidate is int {
+                return candidate.toString();
+            }
+            if candidate is decimal {
+                return candidate.toString();
+            }
+        }
+    }
+    return "—";
+}
 
 public function main(string... args) returns error? {
     ClientState state = loadState();
@@ -126,6 +200,14 @@ function simulateDriverInteractive() returns error? {
         io:print("Driver phone: ");
         string phone = io:readln().trim();
         return simulate({}, ["simulate", "driver", "register", "--name", name, "--phone", phone]);
+    }
+    if choice == "2" {
+        io:print("Driver ID: ");
+        string driverId = io:readln().trim();
+        io:print("Status (AVAILABLE/OFFLINE/BUSY): ");
+        string status = io:readln().trim();
+        return simulate({}, ["simulate", "driver", "set-status", "--driver", driverId,
+            "--status", status]);
     }
     io:print("Order ID: ");
     string orderId = io:readln().trim();
@@ -314,6 +396,13 @@ function simulate(ClientState state, string[] args) returns error? {
         ApiResult|error result = apiFetch(apiClient, "POST", "/delivery/drivers",
             buildRegisterDriverPayload(option(args, "--name") ?: "Demo Driver",
                 option(args, "--phone") ?: "+264810000001"));
+        if result is error { return result; }
+        printJson(result.body);
+        return;
+    } else if area == "driver" && action == "set-status" && driverId is string {
+        string status = option(args, "--status") ?: "AVAILABLE";
+        ApiResult|error result = apiFetch(apiClient, "PUT",
+            "/delivery/drivers/" + driverId + "/status", {status});
         if result is error { return result; }
         printJson(result.body);
         return;

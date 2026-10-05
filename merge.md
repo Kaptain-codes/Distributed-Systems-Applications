@@ -21,8 +21,7 @@ The current remote baseline includes the admin/notification service refactor fro
 ### Modified tracked files
 
 - `Assignment-2\README.md`
-- `Assignment-2\debug-session-1.md`
-- `Assignment-2\debug-session-4.md`
+- `Assignment-2\debug.md` (canonical consolidated debug record)
 - `Assignment-2\infra\docker\README.md`
 - `Assignment-2\infra\docker\initdb\delivery-db\01-schema.sql`
 - `Assignment-2\infra\docker\scripts\reset-dev-data.ps1`
@@ -37,9 +36,6 @@ The current remote baseline includes the admin/notification service refactor fro
 
 ### Untracked files
 
-- `Assignment-2\debug-session-2.md`
-- `Assignment-2\debug-session-5.md`
-- `Assignment-2\docs\debug-index.md`
 - `Assignment-2\infra\docker\docker-compose.scale.yml`
 - `Assignment-2\infra\docker\initdb\delivery-db\tests\driver-claim-concurrency.ps1`
 - `Assignment-2\infra\docker\scripts\check-consumers.ps1`

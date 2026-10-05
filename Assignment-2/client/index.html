@@ -12,13 +12,18 @@
   <header class="app-header">
     <div><p class="eyebrow">DISTRIBUTED FOOD DELIVERY</p><h1>Food Delivery Console</h1><p id="customerLine">Resolving customer identity…</p></div>
     <div class="connection">
+      <div class="mode-toggle" role="group" aria-label="View mode"><button id="customerMode" type="button">Customer</button><button id="developerMode" type="button">Developer</button></div>
       <label for="baseUrl">Gateway base URL</label>
       <div class="conn-row"><input id="baseUrl" type="url"><button id="connectBtn">Connect &amp; refresh</button><button id="customerChip" class="chip" title="Customer identity">No customer</button><i id="connDot" class="conn-dot" aria-label="Disconnected"></i></div>
       <p id="connectionState" class="status-msg" role="status"></p>
     </div>
   </header>
   <div id="banner" class="banner" hidden role="alert"></div>
-  <main class="layout">
+  <main id="customerShell" class="customer-shell" hidden>
+    <section id="customerView" class="customer-view"></section>
+    <div id="customerProgress" class="customer-progress" hidden></div>
+  </main>
+  <main id="developerShell" class="layout">
     <aside class="sidebar" aria-label="Console sections">
       <button class="tab active" data-tab="catalog">Catalog</button>
       <button class="tab" data-tab="orders">My orders</button>

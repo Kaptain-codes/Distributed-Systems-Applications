@@ -45,11 +45,15 @@ final kafka:ConsumerConfiguration orderConsumerConfiguration = {
     offsetReset: "earliest",
     autoCommit: false,
     pollingInterval: 1,
-    maxPollRecords: 10
+    maxPollRecords: 1,
+    sessionTimeout: 10000,
+    heartBeatInterval: 3000,
+    maxPollInterval: 120000
 };
 
 kafka:Consumer|error? orderConsumer = ();
 boolean kafkaConsumerReady = false;
+boolean consumerPollInProgress = false;
 map<boolean> processedRuntimeEvents = {};
 
 function startKafkaRuntime() returns error? {
@@ -73,11 +77,20 @@ class OrderKafkaConsumerJob {
     *task:Job;
 
     public function execute() {
+        lock {
+            if consumerPollInProgress {
+                return;
+            }
+            consumerPollInProgress = true;
+        }
         kafka:Consumer|error? consumerValue = orderConsumer;
         if consumerValue is kafka:Consumer {
             kafka:AnydataConsumerRecord[]|kafka:Error records = consumerValue->poll(consumerPollTimeout);
             if records is kafka:Error {
                 kafkaConsumerReady = false;
+                lock {
+                    consumerPollInProgress = false;
+                }
                 log:printError("order Kafka poll failed", 'error = records);
                 runtime:sleep(1);
                 return;
@@ -85,6 +98,9 @@ class OrderKafkaConsumerJob {
             foreach kafka:AnydataConsumerRecord kafkaRecord in records {
                 handleRuntimeRecord(consumerValue, kafkaRecord);
             }
+        }
+        lock {
+            consumerPollInProgress = false;
         }
     }
 }
