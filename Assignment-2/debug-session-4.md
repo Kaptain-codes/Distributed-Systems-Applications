@@ -157,3 +157,161 @@ This runtime dependency/packaging failure is in the delivery-service
 `Ballerina.toml`/connector workstream. The Compose wiring is intentionally
 preserved; Session 2 must correct the Ballerina SQL driver configuration, then
 rerun the live persistence and replay checks.
+
+## Round 2 - Session 4 — Compose, scale, scripts, and consumer liveness
+
+### Files changed
+
+- `infra/docker/docker-compose.scale.yml`
+- `infra/docker/scripts/check-consumers.ps1`
+- `infra/docker/scripts/start-dev.ps1`
+- `infra/docker/scripts/reset-dev-data.ps1`
+
+The main Compose file was not changed during Round 2. Existing concurrent
+changes in it were preserved.
+
+### Gateway dependency — PASS
+
+The rendered Compose configuration shows gateway dependencies on downstream
+services use `condition: service_started` with `required: false`; only
+`gateway-redis` is required. No change was necessary.
+
+```text
+docker compose -f infra/docker/docker-compose.yml --profile order-customer config
+gateway:
+  admin-service: service_started, required=false
+  customer-service: service_started, required=false
+  delivery-service: service_started, required=false
+  notification-service: service_started, required=false
+  order-service: service_started, required=false
+  payment-service: service_started, required=false
+  restaurant-service: service_started, required=false
+  gateway-redis: service_started, required=true
+```
+
+After bringing up the order-customer profile, `restaurant-service` was stopped
+as an unrelated service. The gateway remained healthy and returned:
+
+```text
+HTTP/1.1 200 OK
+{"status":"UP", "service":"gateway"}
+```
+
+### Scaled delivery consumers — PASS
+
+Added `docker-compose.scale.yml`. It uses the Compose `!override` merge tag
+and Docker-assigned localhost ephemeral ports, avoiding the base service's
+fixed `8086` clash:
+
+```powershell
+docker compose -f infra/docker/docker-compose.yml `
+  -f infra/docker/docker-compose.scale.yml `
+  --profile delivery up -d --scale delivery-service=2
+docker compose -f infra/docker/docker-compose.yml `
+  -f infra/docker/docker-compose.scale.yml `
+  --profile delivery ps
+```
+
+Observed:
+
+```text
+delivery-service-1  running  healthy  127.0.0.1:54933->9090
+delivery-service-2  running  healthy  127.0.0.1:54934->9090
+```
+
+Kafka showed two distinct `delivery-service` group members with zero lag.
+
+### Consumer-liveness script — PASS
+
+Added `infra/docker/scripts/check-consumers.ps1`. It reports each requested
+group's active member count and total numeric lag, failing on zero members,
+unknown lag, or lag above `MaxLag`.
+
+```powershell
+.\infra\docker\scripts\check-consumers.ps1 `
+  -Groups delivery-service -MaxLag 0
+```
+
+Observed:
+
+```text
+delivery-service|members=2|lag=0|PASS
+exit=0
+```
+
+The script is intentionally diagnostic rather than an application healthcheck.
+Making `/health` report consumer membership belongs to service workstreams:
+**HANDOFF REQUIRED — Sessions 1/2**.
+
+### Script execution — PASS
+
+`start-dev.ps1` and `reset-dev-data.ps1` now accept optional non-interactive
+parameters while retaining their prompts:
+
+```powershell
+.\infra\docker\scripts\start-dev.ps1 -Profile order-customer
+.\infra\docker\scripts\start-containers.ps1
+.\infra\docker\scripts\stop-containers.ps1
+.\infra\docker\scripts\reset-dev-data.ps1 `
+  -Profile order-customer -ConfirmReset
+```
+
+Evidence:
+
+- `start-dev.ps1 -Profile order-customer` rebuilt gateway, order-service, and
+  customer-service; the BuildKit log included each `Building` phase and
+  `COPY`/`RUN bal build` steps. The resulting order-customer services were
+  running and healthy.
+- No-argument `start-containers.ps1` selected the `all` profile and brought
+  all existing stopped containers up; `docker compose ps` showed the stack
+  running and healthy.
+- No-argument `stop-containers.ps1` stopped the all-profile stack; `ps -a`
+  showed the services exited.
+- `reset-dev-data.ps1 -Profile order-customer -ConfirmReset` removed the
+  order/customer/gateway containers and their named volumes. `ps -a` showed
+  those resources absent while unrelated profile containers remained exited.
+
+### BAL configuration audit — PASS
+
+Compared rendered `BAL_CONFIG_DATA` keys against `configurable` declarations
+in each service source. No unused Compose keys were found.
+
+```text
+admin-service: unused=; missing=port
+delivery-service: unused=; missing=
+gateway: unused=; missing=port
+notification-service: unused=; missing=port
+order-service: unused=; missing=consumerPollTimeout,consumerRetries,
+  consumerRetryBackoffFirst,consumerRetryBackoffSecond,durableOutboxMinAgeSeconds,
+  mongoConnectionTimeoutMs,mongoSocketTimeoutMs,orderConsumerGroup,port,
+  timeoutSweepInterval
+payment-service: unused=; missing=
+restaurant-service: unused=; missing=
+customer-service: no configurable declarations; no Compose BAL keys
+```
+
+The missing keys all have source defaults and are not unsupported settings.
+
+### Compose and script validation — PASS
+
+```text
+docker compose -f infra/docker/docker-compose.yml config --quiet
+PASS
+docker compose -f infra/docker/docker-compose.yml `
+  -f infra/docker/docker-compose.scale.yml config --quiet
+PASS
+```
+
+PowerShell parser validation passed for all five infrastructure scripts,
+including the new consumer check.
+
+### Remaining infrastructure issues
+
+- **HANDOFF REQUIRED — Sessions 1/2:** application health endpoints still
+  report HTTP readiness, not Kafka group membership; use the new diagnostic
+  script for consumer liveness.
+- The scale override intentionally replaces host port `8086` with ephemeral
+  ports `54933`/`54934` (actual values vary); service-to-service traffic
+  continues to use `delivery-service:9090`.
+- The consumer script requires the Kafka container and currently configured
+  group names; it is not an acceptance harness replacement.

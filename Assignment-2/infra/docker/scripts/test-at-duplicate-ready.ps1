@@ -64,7 +64,10 @@ try {
     Publish-DuplicateReady $event 20
     if (!(Wait-Topic $id $orderReadyTopic)) { throw "orders.ready not observed after 20 duplicate READY records" }
     $readyRecords = Assert-SingleEventTopic $id $orderReadyTopic
+    $previousMaxRedelivery = $script:MaxToleratedRedelivery
+    $script:MaxToleratedRedelivery = 19
     $injected = Assert-SingleEventTopic $id $readyTopic 20
+    $script:MaxToleratedRedelivery = $previousMaxRedelivery
     $orderAfter = Wait-Order $id @("READY","CANCELLED","OUT_FOR_DELIVERY","DELIVERED")
     if ($orderAfter.status -notin @("READY","OUT_FOR_DELIVERY","DELIVERED","CANCELLED")) {
         throw "unexpected final state after duplicate READY injection: $($orderAfter.status)"

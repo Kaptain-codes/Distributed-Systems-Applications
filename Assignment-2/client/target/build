@@ -1,0 +1,54 @@
+{
+  "last_build_time": 1791229393486,
+  "last_update_time": 1791229393486,
+  "last_bal_toml_update_time": 1791229219475,
+  "distribution_version": "2201.13.4",
+  "last_modified_time": {
+    "foodDeliveryClient": 1791229357322
+  },
+  "last_build_options": {
+    "compilationOptions": {
+      "observabilityIncluded": true,
+      "dumpBir": false,
+      "cloud": "",
+      "dumpGraph": false,
+      "dumpRawGraphs": false
+    }
+  },
+  "src_meta_info": [
+    {
+      "file": "C:\\Users\\wykva\\IdeaProjects\\Distributed-Systems-Applications\\Assignment-2\\client\\Ballerina.toml",
+      "hash": "fdebdd4658a277141274453c850ecb481410b44b0185a4c1b6b15a1a467b4b1e",
+      "size": 159,
+      "lastModifiedTime": 1791229219475
+    },
+    {
+      "file": "C:\\Users\\wykva\\IdeaProjects\\Distributed-Systems-Applications\\Assignment-2\\client\\client.bal",
+      "hash": "026d72b4a31c6a58d5374d6fac64b540920a5473ef65d5de58f327d22146096a",
+      "size": 6173,
+      "lastModifiedTime": 1791229357322
+    }
+  ],
+  "target_exec_meta_info": {
+    "file": "C:\\Users\\wykva\\IdeaProjects\\Distributed-Systems-Applications\\Assignment-2\\client\\target\\backup\\bin\\foodDeliveryClient.jar",
+    "hash": "b10cfe27db36a075551ba2e7a9c51f213ae0b71b995b5a90c8a05c1861669ad9",
+    "size": 49073539,
+    "lastModifiedTime": 1791229398124
+  },
+  "settings_meta_info": {
+    "file": "C:\\Users\\wykva\\.ballerina\\Settings.toml",
+    "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "size": 0,
+    "lastModifiedTime": 1782327368914
+  },
+  "ballerina_toml_meta_info": {
+    "file": "C:\\Users\\wykva\\IdeaProjects\\Distributed-Systems-Applications\\Assignment-2\\client\\Ballerina.toml",
+    "hash": "fdebdd4658a277141274453c850ecb481410b44b0185a4c1b6b15a1a467b4b1e",
+    "size": 159,
+    "lastModifiedTime": 1791229219475
+  },
+  "imports": [
+    "ballerina/http",
+    "ballerina/io"
+  ]
+}

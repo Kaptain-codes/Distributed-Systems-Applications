@@ -1,3 +1,8 @@
+param(
+    [ValidateSet("order-customer", "notification-admin", "restaurant-payment", "delivery", "all")]
+    [string]$Profile
+)
+
 # start-dev.ps1
 # Pin working directory to infra/docker (where docker-compose.yml and .env
 # actually live), regardless of where this script is invoked from.
@@ -97,12 +102,16 @@ $Profiles = @{
     "5" = "all"
 }
 
-$Choice = Read-Host "Select a profile [1-5]"
-if (-not $Profiles.ContainsKey($Choice)) {
-    Write-Host "Selection aborted: choose a number from 1 to 5." -ForegroundColor Red
-    exit 1
+if ($Profile) {
+    $TargetProfile = $Profile
+} else {
+    $Choice = Read-Host "Select a profile [1-5]"
+    if (-not $Profiles.ContainsKey($Choice)) {
+        Write-Host "Selection aborted: choose a number from 1 to 5." -ForegroundColor Red
+        exit 1
+    }
+    $TargetProfile = $Profiles[$Choice]
 }
-$TargetProfile = $Profiles[$Choice]
 
 # 3. Execution Engine
 Write-Host "`nStarting '$TargetProfile' profile containers..." -ForegroundColor Green

@@ -108,6 +108,11 @@ service /'order on new http:Listener(port) {
                 log:printError("order Kafka producer initialization failed", 'error = producer);
                 return producer;
             }
+            error? warmed = warmupKafkaProducer();
+            if warmed is error {
+                log:printError("order Kafka producer warm-up failed", 'error = warmed);
+                return warmed;
+            }
         }
         _ = check task:scheduleJobRecurByFrequency(new DurableRecoveryJob(), 10);
         _ = check task:scheduleJobRecurByFrequency(new OrderTimeoutJob(), timeoutSweepInterval);
@@ -115,7 +120,12 @@ service /'order on new http:Listener(port) {
     }
 
     resource function get health() returns json {
-        return {status: "UP", 'service: "order"};
+        string status = !kafkaRuntimeEnabled || kafkaConsumerReady ? "UP" : "DOWN";
+        return {
+            status: status,
+            'service: "order",
+            kafkaConsumerReady: kafkaConsumerReady
+        };
     }
 
     resource function post orders(http:Request req) returns json|http:Response {

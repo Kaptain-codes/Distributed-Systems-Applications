@@ -9,7 +9,12 @@ IF OBJECT_ID('dbo.deliveries', 'U') IS NULL
 CREATE TABLE deliveries (id UNIQUEIDENTIFIER PRIMARY KEY, order_id UNIQUEIDENTIFIER NOT NULL UNIQUE,
   restaurant_id UNIQUEIDENTIFIER NOT NULL, driver_id UNIQUEIDENTIFIER NULL, pickup_address NVARCHAR(255) NOT NULL,
   dropoff_address NVARCHAR(255) NOT NULL, status VARCHAR(16) NOT NULL, attempts INT NOT NULL DEFAULT 0,
-  assigned_at DATETIME2 NULL, completed_at DATETIME2 NULL, failure_reason NVARCHAR(255) NULL);
+  assigned_at DATETIME2 NULL, completed_at DATETIME2 NULL, failure_reason NVARCHAR(255) NULL,
+  assigned_event_id NVARCHAR(120) NULL, assigned_published BIT NOT NULL DEFAULT 0);
+IF COL_LENGTH('dbo.deliveries', 'assigned_event_id') IS NULL
+  ALTER TABLE deliveries ADD assigned_event_id NVARCHAR(120) NULL;
+IF COL_LENGTH('dbo.deliveries', 'assigned_published') IS NULL
+  ALTER TABLE deliveries ADD assigned_published BIT NOT NULL CONSTRAINT df_deliveries_assigned_published DEFAULT 0;
 IF OBJECT_ID('dbo.processed_events', 'U') IS NULL
 CREATE TABLE processed_events (event_id UNIQUEIDENTIFIER PRIMARY KEY, processed_at DATETIME2 NOT NULL);
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'ix_drivers_status_last_assigned_at'

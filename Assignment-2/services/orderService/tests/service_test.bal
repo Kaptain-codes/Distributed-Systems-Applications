@@ -14,7 +14,9 @@ function beforeSuiteFunc() {
 @test:Config {}
 function testServiceWithProperName() {
     json|error response = testClient->/'order/health;
-    test:assertEquals(response, {status: "UP", 'service: "order"});
+    test:assertEquals(response, {
+        status: "UP", 'service: "order", kafkaConsumerReady: false
+    });
 }
 
 // Negative test function
@@ -23,7 +25,9 @@ function testServiceWithEmptyName() returns error? {
     http:Response response = check testClient->/'order/health;
     test:assertEquals(response.statusCode, 200);
     json healthPayload = check response.getJsonPayload();
-    test:assertEquals(healthPayload, {status: "UP", 'service: "order"});
+    test:assertEquals(healthPayload, {
+        status: "UP", 'service: "order", kafkaConsumerReady: false
+    });
 }
 
 @test:Config {}
@@ -39,6 +43,21 @@ function testDerivedEventIdIsStableForTheSameSource() {
     string differentTarget = checkpanic derivedEventId("source-1", "payment.requested");
     test:assertEquals(first, second);
     test:assertNotEquals(first, differentTarget);
+}
+
+@test:Config {}
+function testRestaurantReadyDerivedEventIdIsStableForTheSameSource() {
+    string first = checkpanic derivedEventId("restaurant-ready-source", "orders.ready");
+    string second = checkpanic derivedEventId("restaurant-ready-source", "orders.ready");
+    test:assertEquals(first, second);
+}
+
+@test:Config {}
+function testRecentOutboxRecordsAreExcludedFromRecovery() {
+    test:assertFalse(isDurableOutboxOldEnough(
+        "2026-01-01T00:00:25.000000000Z", "2026-01-01T00:00:20.000000000Z"));
+    test:assertTrue(isDurableOutboxOldEnough(
+        "2026-01-01T00:00:10.000000000Z", "2026-01-01T00:00:20.000000000Z"));
 }
 
 @test:Config {}

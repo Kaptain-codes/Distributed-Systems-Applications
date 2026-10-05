@@ -106,7 +106,7 @@ services:
         deliveryService = "http://delivery-service:9090"
         notificationService = "http://notification-service:9090"
         adminService = "http://admin-service:9090"
-        downstreamTimeout = ${GATEWAY_DOWNSTREAM_TIMEOUT:-10}
+        downstreamTimeout = ${GATEWAY_DOWNSTREAM_TIMEOUT:-30}
     depends_on:
       gateway-redis:
         condition: service_started

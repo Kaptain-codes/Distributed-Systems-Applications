@@ -279,6 +279,86 @@ Evidence: [docker-compose.yml](infra/docker/docker-compose.yml).
 
 No metrics exporter, tracing backend, dashboard, alerting configuration or centralized logging configuration is present.
 
+## Acceptance and delivery verification
+
+Run the acceptance scripts from `Assignment-2/infra/docker` with the `all`
+profile running. Use the committed `.env.example` defaults; in particular,
+leave `GATEWAY_DOWNSTREAM_TIMEOUT` unset in the shell and do not raise it
+locally, because an override can hide downstream slowness.
+
+Run these scripts **sequentially, never in parallel**, in this order:
+
+1. `.\scripts\test-at-1.ps1` — order creation and restaurant acceptance.
+2. `.\scripts\test-at-2.ps1` — restaurant preparation/ready progression.
+3. `.\scripts\test-at-3.ps1` — delivery assignment/progression.
+4. `.\scripts\test-at-4.ps1` — delivery completion and order confirmation.
+5. `.\scripts\test-at-5.ps1` — cancellation and asynchronous
+   `orders.cancelled` publication.
+6. `.\scripts\test-at-duplicate-ready.ps1` — duplicate `restaurant.ready`
+   delivery handling and idempotency.
+
+The scripts poll asynchronous transitions, so allow seconds to several
+minutes per script. A recorded AT-5 run took approximately 6 minutes
+23 seconds; other durations are workload- and startup-dependent and are not
+certified here.
+
+To exercise two delivery instances, start the delivery profile with a scale
+override, then run the duplicate-ready script:
+
+```powershell
+cd Assignment-2/infra/docker
+docker compose -f docker-compose.yml -f docker-compose.scale.yml `
+  --profile delivery up -d --build --scale delivery-service=2
+.\scripts\test-at-duplicate-ready.ps1
+```
+
+Session 4 observed two healthy delivery replicas with two distinct
+`delivery-service` Kafka members and zero lag. Repeat the membership and lag
+check before and after the run:
+
+```powershell
+.\scripts\check-consumers.ps1 -Groups delivery-service -MaxLag 0
+```
+
+The helper reports `members` and total `lag`; zero members, unknown lag, or
+lag above `MaxLag` is a failure. It queries `kafka:9092` from the Kafka
+container. For a manual host-side query, use `localhost:29092`.
+
+Delivery durability is enabled by Compose with `durableStateEnabled = true`.
+The initializer mounts
+[`infra/docker/initdb/delivery-db/01-schema.sql`](infra/docker/initdb/delivery-db/01-schema.sql),
+which idempotently creates `drivers`, `deliveries`, and `processed_events` and
+adds the guarded `assigned_event_id` and `assigned_published` delivery columns
+when upgrading an existing database, plus the driver assignment index. Live
+SQL-driver packaging and two-instance
+duplicate-READY handling are covered by Session 2 evidence; crash-between-SQL
+and Kafka replay remains **UNVERIFIED**.
+
+Order Service uses the configurable
+`durableOutboxMinAgeSeconds` setting, defaulting to `20` seconds. The recovery
+job only republishes pending outbox rows older than that threshold, while the
+regular recovery job runs every 10 seconds. This prevents a recent asynchronous
+flush from being republished prematurely while retaining at-least-once recovery.
+
+## Troubleshooting asynchronous startup
+
+- If `kafka-init` remains `running`, inspect `docker compose logs kafka-init`
+  and wait for Kafka health. Verify topics with
+  `.\infra\docker\scripts\check-topics.ps1`; do not start consumers against a
+  broker that has not become healthy.
+- If a consumer group has no members, inspect its container logs and run
+  `.\infra\docker\scripts\check-consumers.ps1`. For Order Service, duplicate
+  keys or unsupported values in `BAL_CONFIG_DATA` can stop startup.
+- `invalid TOML` with duplicate keys means a key occurs more than once in the
+  Ballerina `BAL_CONFIG_DATA` block. Remove the duplicate before recreating
+  the affected service.
+- `unused configuration value` means the service source does not declare that
+  configurable key. Remove the key from that service's configuration; do not
+  copy SQL settings into Order Service, which currently uses Mongo persistence.
+- If timestamps or polling windows behave differently between host and WSL,
+  check clock synchronization first. Host/WSL clock drift can make
+  timestamp-aware acceptance assertions appear early or late.
+
 ## Known inconsistencies
 
 1. Service tests and image builds must remain aligned with the `/.../health`

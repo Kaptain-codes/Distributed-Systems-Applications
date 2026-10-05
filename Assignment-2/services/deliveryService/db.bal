@@ -30,6 +30,14 @@ type DeliveryRow record {|
     string updatedAt;
 |};
 
+type AssignmentRow record {|
+    string? assignedEventId;
+    int assignedPublished;
+|};
+
+map<string> deliveryAssignmentEventIds = {};
+map<boolean> deliveryAssignmentPublished = {};
+
 function initDeliveryDb() returns error? {
     if !durableStateEnabled {
         return;
@@ -161,7 +169,7 @@ function dbSaveDelivery(Delivery delivery) returns error? {
     );
 }
 
-function dbCreateDeliveryIfAbsent(Delivery delivery) returns boolean|error {
+function dbCreateDeliveryIfAbsent(Delivery delivery, string assignedEventId) returns boolean|error {
     if !durableStateEnabled {
         foreach Delivery existing in deliveries {
             if existing.orderId == delivery.orderId {
@@ -169,16 +177,18 @@ function dbCreateDeliveryIfAbsent(Delivery delivery) returns boolean|error {
             }
         }
         deliveries[delivery.deliveryId] = delivery;
+        deliveryAssignmentEventIds[delivery.orderId] = assignedEventId;
+        deliveryAssignmentPublished[delivery.orderId] = false;
         return true;
     }
     mssql:Client db = check deliveryDb;
     sql:ExecutionResult result = check db->execute(
         `INSERT INTO deliveries (id, order_id, restaurant_id, driver_id, pickup_address,
-             dropoff_address, status, assigned_at)
+             dropoff_address, status, assigned_at, assigned_event_id, assigned_published)
          SELECT ${delivery.deliveryId}, ${delivery.orderId},
              '00000000-0000-0000-0000-000000000000', ${delivery.driverId},
              ${delivery.pickupAddress}, ${delivery.deliveryAddress}, ${delivery.status},
-             SYSUTCDATETIME()
+             SYSUTCDATETIME(), ${assignedEventId}, 0
          WHERE NOT EXISTS (
              SELECT 1 FROM deliveries WITH (UPDLOCK, HOLDLOCK)
              WHERE order_id = ${delivery.orderId}
@@ -187,31 +197,70 @@ function dbCreateDeliveryIfAbsent(Delivery delivery) returns boolean|error {
     return result.affectedRowCount > 0;
 }
 
-function dbMarkEvent(string eventId) returns error? {
+function dbDeliveryAssignment(string orderId) returns AssignmentRow|error? {
     if !durableStateEnabled {
-        deliveryProcessedEvents[eventId] = true;
+        string? eventId = deliveryAssignmentEventIds[orderId];
+        if eventId is () {
+            return ();
+        }
+        return {assignedEventId: eventId,
+            assignedPublished: deliveryAssignmentPublished[orderId] == true ? 1 : 0};
+    }
+    mssql:Client db = check deliveryDb;
+    stream<AssignmentRow, sql:Error?> rows = db->query(
+        `SELECT assigned_event_id AS assignedEventId,
+                CONVERT(int, assigned_published) AS assignedPublished
+         FROM deliveries WHERE order_id = ${orderId}`
+    );
+    record {| AssignmentRow value; |}|error? next = rows.next();
+    if next is error || next is () {
+        return next is error ? next : ();
+    }
+    return next.value;
+}
+
+function dbSetAssignmentEvent(string orderId, string assignedEventId) returns error? {
+    if !durableStateEnabled {
+        deliveryAssignmentEventIds[orderId] = assignedEventId;
+        deliveryAssignmentPublished[orderId] = false;
         return;
     }
     mssql:Client db = check deliveryDb;
     _ = check db->execute(
-        `INSERT INTO processed_events (event_id, processed_at)
-         SELECT ${eventId}, SYSUTCDATETIME()
-         WHERE NOT EXISTS (SELECT 1 FROM processed_events WHERE event_id = ${eventId})`
+        `UPDATE deliveries SET assigned_event_id = ${assignedEventId},
+             assigned_published = 0
+         WHERE order_id = ${orderId} AND assigned_event_id IS NULL`
     );
 }
 
-function dbEventProcessed(string eventId) returns boolean|error {
+function dbMarkAssignmentPublished(string orderId) returns error? {
     if !durableStateEnabled {
-        return deliveryProcessedEvents[eventId] == true;
+        deliveryAssignmentPublished[orderId] = true;
+        return;
     }
     mssql:Client db = check deliveryDb;
-    stream<record {| int total; |}, sql:Error?> rows = db->query(
-        `SELECT COUNT(*) AS total FROM processed_events WHERE event_id = ${eventId}`
+    _ = check db->execute(
+        `UPDATE deliveries SET assigned_published = 1
+         WHERE order_id = ${orderId} AND assigned_published = 0`
     );
-    record {| record {| int total; |} value; |}|error? next = rows.next();
-    if next is error || next is () {
-        return next is error ? next : false;
+}
+
+function dbClaimEvent(string eventId) returns boolean|error {
+    if !durableStateEnabled {
+        if deliveryProcessedEvents[eventId] == true {
+            return false;
+        }
+        deliveryProcessedEvents[eventId] = true;
+        return true;
     }
-    record {| int total; |} row = next.value;
-    return row is record {| int total; |} && row.total > 0;
+    mssql:Client db = check deliveryDb;
+    sql:ExecutionResult result = check db->execute(
+        `INSERT INTO processed_events (event_id, processed_at)
+         SELECT ${eventId}, SYSUTCDATETIME()
+         WHERE NOT EXISTS (
+             SELECT 1 FROM processed_events WITH (UPDLOCK, HOLDLOCK)
+             WHERE event_id = ${eventId}
+         )`
+    );
+    return result.affectedRowCount > 0;
 }

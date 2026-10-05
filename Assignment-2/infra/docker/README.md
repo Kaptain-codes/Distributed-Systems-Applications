@@ -174,6 +174,62 @@ service name and the container port instead of `localhost`.
 Add new topics to the `TOPICS` array in
 [`kafka/create-topics.sh`](kafka/create-topics.sh).
 
+## Acceptance and delivery verification
+
+Run from this directory with the `all` profile. Keep
+`GATEWAY_DOWNSTREAM_TIMEOUT` at the template default (`10`) and unset any
+local override while certifying; a larger local value can hide downstream
+slowness.
+
+Run `test-at-1.ps1`, `test-at-2.ps1`, `test-at-3.ps1`, `test-at-4.ps1`,
+`test-at-5.ps1`, then `test-at-duplicate-ready.ps1`, in that order and
+**sequentially, never in parallel**:
+
+```powershell
+.\scripts\test-at-1.ps1
+.\scripts\test-at-2.ps1
+.\scripts\test-at-3.ps1
+.\scripts\test-at-4.ps1
+.\scripts\test-at-5.ps1
+.\scripts\test-at-duplicate-ready.ps1
+```
+
+AT-1 through AT-4 prove the order/restaurant/delivery progression through
+confirmation; AT-5 proves cancellation and asynchronous cancellation
+publication; the duplicate-ready script probes duplicate delivery-event
+handling. Each script polls asynchronous work and may take seconds to several
+minutes. The recorded AT-5 evidence took approximately 6 minutes 23 seconds;
+no fixed duration is guaranteed for the other scripts.
+
+For a two-instance delivery run:
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.scale.yml `
+  --profile delivery up -d --build --scale delivery-service=2
+.\scripts\test-at-duplicate-ready.ps1
+.\scripts\check-consumers.ps1 -Groups delivery-service -MaxLag 0
+```
+
+`check-consumers.ps1` reports active membership and aggregate lag. It fails
+when membership is zero, lag is unknown, or lag exceeds `MaxLag`. It runs the
+Kafka query inside the broker container with `kafka:9092`; host-side tools use
+`localhost:29092`. Session 4 observed two healthy delivery replicas with two
+distinct `delivery-service` members and zero lag. Crash-between-SQL and Kafka
+replay remains **UNVERIFIED**.
+
+Compose enables delivery durable state with `durableStateEnabled = true` and
+mounts `initdb/delivery-db/01-schema.sql`. That idempotent SQL initializer
+creates the `drivers`, `deliveries`, and `processed_events` tables and the
+guarded `assigned_event_id` and `assigned_published` delivery columns for
+existing databases, plus the driver status/last-assigned index. The delivery SQL driver packaging and
+duplicate-READY handling are covered by Session 2 evidence; crash-between-SQL
+and Kafka replay remains **UNVERIFIED**.
+
+Order Service uses the configurable `durableOutboxMinAgeSeconds` setting,
+defaulting to `20` seconds. The recovery job only republishes pending outbox
+rows older than that threshold, while the regular recovery job runs every
+10 seconds.
+
 ## Troubleshooting
 
 ### A database is `unhealthy` after `.env` was regenerated
@@ -214,3 +270,22 @@ If the script came from a downloaded ZIP, remove its downloaded-file mark:
 ```powershell
 Unblock-File .\scripts\start-dev.ps1
 ```
+
+### Kafka or consumer startup
+
+- If `kafka-init` remains at `running`, inspect `docker compose logs kafka-init`,
+  wait for the Kafka healthcheck, and verify topics with
+  `.\kafka\check-topics.ps1`. A running one-shot container is not proof that
+  topic creation completed.
+- If a consumer group has no members, inspect service logs and run
+  `.\scripts\check-consumers.ps1`. A duplicate TOML key or unsupported
+  configurable value can terminate the consumer before membership is formed.
+- `invalid TOML file` with duplicate keys means the same key occurs more than
+  once in a service's `BAL_CONFIG_DATA` block. Remove the repeated key and
+  recreate that service.
+- `unused configuration value` means the target service does not declare that
+  configurable key. Remove it rather than copying settings between services;
+  Order Service currently uses Mongo persistence.
+- If host and WSL clocks differ, synchronize both before relying on
+  timestamp-aware acceptance assertions or polling deadlines. Clock drift can
+  make an asynchronous event appear early or late.

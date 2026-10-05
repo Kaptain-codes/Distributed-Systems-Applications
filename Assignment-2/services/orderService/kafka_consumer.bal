@@ -40,7 +40,7 @@ final string[] orderConsumerTopics = [
 ];
 
 final kafka:ConsumerConfiguration orderConsumerConfiguration = {
-    groupId: "order-service",
+    groupId: orderConsumerGroup,
     topics: orderConsumerTopics,
     offsetReset: "earliest",
     autoCommit: false,
@@ -49,6 +49,7 @@ final kafka:ConsumerConfiguration orderConsumerConfiguration = {
 };
 
 kafka:Consumer|error? orderConsumer = ();
+boolean kafkaConsumerReady = false;
 map<boolean> processedRuntimeEvents = {};
 
 function startKafkaRuntime() returns error? {
@@ -57,9 +58,14 @@ function startKafkaRuntime() returns error? {
     }
     kafka:Consumer|error consumer = new (kafkaBootstrap, orderConsumerConfiguration);
     if consumer is error {
+        kafkaConsumerReady = false;
         return consumer;
     }
     orderConsumer = consumer;
+    kafkaConsumerReady = true;
+    log:printInfo("order Kafka consumer started group=" + orderConsumerGroup +
+        " topics=" + orderConsumerTopics.toString() +
+        " durableStateEnabled=" + durableStateEnabled.toString());
     _ = check task:scheduleJobRecurByFrequency(new OrderKafkaConsumerJob(), 1);
 }
 
@@ -71,6 +77,7 @@ class OrderKafkaConsumerJob {
         if consumerValue is kafka:Consumer {
             kafka:AnydataConsumerRecord[]|kafka:Error records = consumerValue->poll(consumerPollTimeout);
             if records is kafka:Error {
+                kafkaConsumerReady = false;
                 log:printError("order Kafka poll failed", 'error = records);
                 runtime:sleep(1);
                 return;

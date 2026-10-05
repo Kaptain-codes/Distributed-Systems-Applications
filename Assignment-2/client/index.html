@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Food Delivery Console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="app-header">
+    <div><p class="eyebrow">DISTRIBUTED FOOD DELIVERY</p><h1>Food Delivery Console</h1><p id="customerLine">Resolving customer identity…</p></div>
+    <div class="connection">
+      <label for="baseUrl">Gateway base URL</label>
+      <div class="conn-row"><input id="baseUrl" type="url"><button id="connectBtn">Connect &amp; refresh</button><button id="customerChip" class="chip" title="Customer identity">No customer</button><i id="connDot" class="conn-dot" aria-label="Disconnected"></i></div>
+      <p id="connectionState" class="status-msg" role="status"></p>
+    </div>
+  </header>
+  <div id="banner" class="banner" hidden role="alert"></div>
+  <main class="layout">
+    <aside class="sidebar" aria-label="Console sections">
+      <button class="tab active" data-tab="catalog">Catalog</button>
+      <button class="tab" data-tab="orders">My orders</button>
+      <button class="tab" data-tab="track">Track</button>
+      <button class="tab" data-tab="notifications">Notifications <span id="unreadBadge"></span></button>
+      <button class="tab" data-tab="simulator">Simulator</button>
+      <button class="tab" data-tab="settings">Settings</button>
+    </aside>
+    <section class="content">
+      <div class="stat-grid">
+        <article class="stat-card"><span>Cart items</span><strong id="cartStat">0</strong></article>
+        <article class="stat-card"><span>Active orders</span><strong id="activeStat">0</strong></article>
+        <article class="stat-card"><span>Delivered today</span><strong id="deliveredStat">0</strong></article>
+        <article class="stat-card"><span>Unread notifications</span><strong id="unreadStat">0</strong></article>
+      </div>
+      <section id="panel-catalog" class="panel active">
+        <div class="section-heading"><div><p class="eyebrow">DISCOVER</p><h2>Restaurants and menu</h2></div><button id="allRestaurants" class="chip">All restaurants</button></div>
+        <div class="filters"><input id="menuSearch" placeholder="Search loaded items…" aria-label="Search loaded menu items"></div>
+        <div id="restaurantList" class="card-list"><p class="empty">Connect to load restaurants.</p></div>
+        <div id="menuList" class="card-list"></div>
+      </section>
+      <section id="panel-orders" class="panel">
+        <div class="section-heading"><div><p class="eyebrow">HISTORY</p><h2>My orders</h2></div><button id="reloadOrders">Reload</button></div>
+        <div id="ordersList" class="card-list"><p class="empty">Resolve a customer to load orders.</p></div>
+      </section>
+      <section id="panel-track" class="panel">
+        <div class="section-heading"><div><p class="eyebrow">LIVE STATUS</p><h2>Track order</h2></div><button id="openSimulator">Open in simulator</button></div>
+        <div id="trackView" class="track-view"><p class="empty">Choose an order to begin tracking.</p></div>
+      </section>
+      <section id="panel-notifications" class="panel">
+        <div class="section-heading"><div><p class="eyebrow">INBOX</p><h2>Notifications</h2></div><button id="reloadNotifications">Reload</button></div>
+        <div id="notificationsList" class="card-list"><p class="empty">No notifications loaded.</p></div>
+      </section>
+      <section id="panel-simulator" class="panel">
+        <div class="section-heading"><div><p class="eyebrow">DEMO HARNESS</p><h2>Simulator</h2></div><label class="toggle"><input id="autoDrive" type="checkbox"> Auto-drive this order</label></div>
+        <p class="banner">Demo harness — stands in for the Restaurant and Driver clients.</p>
+        <div class="two-col"><article class="sim-card"><h3>Kitchen</h3><label>Restaurant<select id="simRestaurant"></select></label><div id="kitchenList" class="card-list"><p class="empty">Select a restaurant.</p></div><div class="actions"><button id="markPreparing">Mark preparing</button><button id="markReady">Mark ready</button></div></article>
+          <article class="sim-card"><h3>Driver</h3><button id="registerDriver">Register driver</button><div id="driverRoster" class="card-list"></div><div class="actions"><button id="pickupBtn">Pickup</button><button id="completeBtn">Complete</button><button id="failBtn">Fail</button></div><p id="degradedNote" class="muted"></p></article></div>
+        <pre id="simLog" class="json-view"></pre>
+      </section>
+      <section id="panel-settings" class="panel">
+        <div class="section-heading"><div><p class="eyebrow">PREFERENCES</p><h2>Settings</h2></div></div>
+        <form id="settingsForm" class="stack"><label>Gateway base URL<input id="settingsBaseUrl" type="url"></label><label>Customer ID override<input id="settingsCustomerId" placeholder="Server-generated customer id"></label><label>Poll interval (ms)<input id="settingsPollMs" type="number" min="1000"></label><label><input id="settingsAutoRegister" type="checkbox"> Auto-register demo customer when no id is available</label><label><input id="settingsIdempotency" type="checkbox"> Use idempotency keys for order writes</label><button type="submit">Save settings</button><button type="button" id="resetState">Reset local state</button></form>
+        <details><summary>Debug drawer (last 50 requests)</summary><pre id="debugLog" class="json-view"></pre></details>
+      </section>
+    </section>
+  </main>
+  <div id="orderSheet" class="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="sheetTitle"><button class="sheet-close" id="closeSheet" aria-label="Close">×</button><h2 id="sheetTitle"></h2><p id="sheetPrice"></p><div class="qty-stepper"><button id="qtyDown">−</button><strong id="qtyValue">1</strong><button id="qtyUp">+</button></div><label>Delivery address<select id="addressSelect"></select></label><fieldset><legend>Payment</legend><label><input type="radio" name="payment" value="SIM_OK" checked> Simulate success</label><label><input type="radio" name="payment" value="SIM_DECLINE"> Simulate decline (AT-2)</label></fieldset><p id="sheetTotal"></p><p id="sheetMessage" class="status-msg"></p><button id="placeOrderBtn">Place order</button></div>
+  <div id="errorSheet" class="sheet error-sheet" hidden role="dialog" aria-modal="true"><h2>API contract response needs attention</h2><p id="errorSummary"></p><pre id="errorRaw" class="json-view"></pre><button id="copyError">Copy response</button><button id="retryError">Retry</button><button id="cancelError">Cancel</button></div>
+  <div id="toastStack" class="toast-stack" aria-live="polite"></div>
+  <script src="app.js"></script>
+</body>
+</html>

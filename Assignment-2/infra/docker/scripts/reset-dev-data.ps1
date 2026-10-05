@@ -5,6 +5,12 @@
     This is destructive. It removes Compose volumes for the selected profile.
 #>
 
+param(
+    [ValidateSet("order-customer", "notification-admin", "restaurant-payment", "delivery", "all")]
+    [string]$Profile,
+    [switch]$ConfirmReset
+)
+
 $DockerDir = Join-Path $PSScriptRoot ".."
 Push-Location -Path $DockerDir
 try {
@@ -27,25 +33,31 @@ Write-Host "2) Notification & Admin"
 Write-Host "3) Restaurant & Payment"
 Write-Host "4) Delivery"
 Write-Host "5) All profiles"
-$choice = Read-Host "Select a profile to reset [1-5]"
-
-if (-not $profiles.ContainsKey($choice)) {
-    Write-Host "Reset cancelled: choose a number from 1 to 5." -ForegroundColor Red
-    exit 1
+if ($Profile) {
+    $targetProfile = $Profile
+} else {
+    $choice = Read-Host "Select a profile to reset [1-5]"
+    if (-not $profiles.ContainsKey($choice)) {
+        Write-Host "Reset cancelled: choose a number from 1 to 5." -ForegroundColor Red
+        exit 1
+    }
+    $targetProfile = $profiles[$choice]
 }
 
-$confirmation = Read-Host "Type RESET to permanently delete '$($profiles[$choice])' data"
-if ($confirmation -cne "RESET") {
-    Write-Host "Reset cancelled." -ForegroundColor Yellow
-    exit 0
+if (-not $ConfirmReset) {
+    $confirmation = Read-Host "Type RESET to permanently delete '$targetProfile' data"
+    if ($confirmation -cne "RESET") {
+        Write-Host "Reset cancelled." -ForegroundColor Yellow
+        exit 0
+    }
 }
 
-docker compose --profile $profiles[$choice] down -v
+docker compose --profile $targetProfile down -v
 if ($LASTEXITCODE -ne 0) {
     throw "Docker Compose failed while removing development data."
 }
 
-Write-Host "Development data reset completed for '$($profiles[$choice])'." -ForegroundColor Green
+Write-Host "Development data reset completed for '$targetProfile'." -ForegroundColor Green
 } finally {
     Pop-Location
 }

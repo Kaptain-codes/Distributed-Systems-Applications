@@ -91,15 +91,6 @@ function handleDeliveryRecord(kafka:Consumer consumer, kafka:AnydataConsumerReco
         commitDeliveryRecord(consumer, kafkaRecord);
         return;
     }
-    boolean|error processed = dbEventProcessed(event.eventId);
-    if processed is error {
-        log:printError("delivery event deduplication lookup failed", 'error = processed);
-        return;
-    }
-    if processed {
-        commitDeliveryRecord(consumer, kafkaRecord);
-        return;
-    }
     if event.eventType == "orders.ready" {
         orderEvents[event.orderId] = event;
         Delivery|error? existing = dbFindDelivery(event.orderId);
@@ -108,48 +99,82 @@ function handleDeliveryRecord(kafka:Consumer consumer, kafka:AnydataConsumerReco
             return;
         }
         if existing is Delivery && existing.status != "CANCELLED" {
-            error? marked = dbMarkEvent(event.eventId);
-            if marked is error { log:printError("delivery event mark failed", 'error = marked); }
-            commitDeliveryRecord(consumer, kafkaRecord);
-            return;
-        }
-        Driver|error? selected = dbAvailableDriver();
-        string? driverId = selected is Driver ? selected.driverId : ();
-        if driverId is string {
-            string now = time:utcToString(time:utcNow());
-            Delivery delivery = {
-                deliveryId: uuid:createType4AsString(), orderId: event.orderId,
-                pickupAddress: "Demo Restaurant", deliveryAddress: "Demo Address",
-                driverId: driverId, status: "ASSIGNED", createdAt: now, updatedAt: now
-            };
-            boolean|error created = dbCreateDeliveryIfAbsent(delivery);
-            if created is error {
-                error? released = dbSetDriverStatus(driverId, "AVAILABLE");
-                if released is error {
-                    log:printError("failed to release driver after assignment failure",
-                        'error = released);
-                }
-                log:printError("delivery assignment persistence failed", 'error = created);
+            AssignmentRow|error? assignment = dbDeliveryAssignment(event.orderId);
+            if assignment is error {
+                log:printError("delivery assignment lookup failed", 'error = assignment);
                 return;
             }
-            if created {
-                error? assigned = publishDeliveryEvent("delivery.assigned", event, delivery);
-                if assigned is error {
-                    log:printError("delivery assignment publication failed", 'error = assigned);
+            AssignmentRow marker = assignment is AssignmentRow ? assignment :
+                {assignedEventId: (), assignedPublished: 0};
+            string assignmentEventId = marker.assignedEventId ?: assignedEventId(event.eventId);
+            if marker.assignedEventId is () {
+                error? initialized = dbSetAssignmentEvent(event.orderId, assignmentEventId);
+                if initialized is error {
+                    log:printError("delivery assignment marker initialization failed",
+                        'error = initialized);
                     return;
                 }
-            } else {
-                error? released = dbSetDriverStatus(driverId, "AVAILABLE");
-                if released is error {
-                    log:printError("duplicate delivery driver release failed", 'error = released);
+            }
+            if marker.assignedPublished == 0 {
+                error? published = publishDeliveryEventWithId(
+                    "delivery.assigned", event, existing, assignmentEventId);
+                if published is error {
+                    log:printError("delivery replay publication failed", 'error = published);
+                    return;
+                }
+                error? markedPublished = dbMarkAssignmentPublished(event.orderId);
+                if markedPublished is error {
+                    log:printError("delivery replay marker update failed", 'error = markedPublished);
+                    return;
                 }
             }
         } else {
-            error? unavailable = publishDeliveryEvent("delivery.not_assigned", event,
-                {orderId: event.orderId, reason: "NO_DRIVER"});
-            if unavailable is error {
-                log:printError("delivery failure publication failed", 'error = unavailable);
-                return;
+            Driver|error? selected = dbAvailableDriver();
+            string? driverId = selected is Driver ? selected.driverId : ();
+            if driverId is string {
+                string now = time:utcToString(time:utcNow());
+                Delivery delivery = {
+                    deliveryId: uuid:createType4AsString(), orderId: event.orderId,
+                    pickupAddress: "Demo Restaurant", deliveryAddress: "Demo Address",
+                    driverId: driverId, status: "ASSIGNED", createdAt: now, updatedAt: now
+                };
+                string assignmentEventId = assignedEventId(event.eventId);
+                boolean|error created = dbCreateDeliveryIfAbsent(delivery, assignmentEventId);
+                if created is error {
+                    error? released = dbSetDriverStatus(driverId, "AVAILABLE");
+                    if released is error {
+                        log:printError("failed to release driver after assignment failure",
+                            'error = released);
+                    }
+                    log:printError("delivery assignment persistence failed", 'error = created);
+                    return;
+                }
+                if created {
+                    error? assigned = publishDeliveryEventWithId(
+                        "delivery.assigned", event, delivery, assignmentEventId);
+                    if assigned is error {
+                        log:printError("delivery assignment publication failed", 'error = assigned);
+                        return;
+                    }
+                    error? markedPublished = dbMarkAssignmentPublished(event.orderId);
+                    if markedPublished is error {
+                        log:printError("delivery assignment marker update failed",
+                            'error = markedPublished);
+                        return;
+                    }
+                } else {
+                    error? released = dbSetDriverStatus(driverId, "AVAILABLE");
+                    if released is error {
+                        log:printError("duplicate delivery driver release failed", 'error = released);
+                    }
+                }
+            } else {
+                error? unavailable = publishDeliveryEvent("delivery.not_assigned", event,
+                    {orderId: event.orderId, reason: "NO_DRIVER"});
+                if unavailable is error {
+                    log:printError("delivery failure publication failed", 'error = unavailable);
+                    return;
+                }
             }
         }
     } else if event.eventType == "orders.cancelled" || event.eventType == "orders.autocancelled" {
@@ -160,12 +185,20 @@ function handleDeliveryRecord(kafka:Consumer consumer, kafka:AnydataConsumerReco
             if saved is error { log:printError("delivery cancellation persistence failed", 'error = saved); }
         }
     }
-    error? marked = dbMarkEvent(event.eventId);
-    if marked is error { log:printError("delivery event mark failed", 'error = marked); }
+    boolean|error claimed = dbClaimEvent(event.eventId);
+    if claimed is error {
+        log:printError("delivery event claim failed", 'error = claimed);
+        return;
+    }
     commitDeliveryRecord(consumer, kafkaRecord);
 }
 
 function publishDeliveryEvent(string topic, DeliveryEvent sourceEvent, json payload) returns error? {
+    return publishDeliveryEventWithId(topic, sourceEvent, payload, uuid:createType4AsString());
+}
+
+function publishDeliveryEventWithId(string topic, DeliveryEvent sourceEvent, json payload,
+        string eventId) returns error? {
     kafka:Producer|error producer = ensureDeliveryProducer();
     if producer is error {
         return producer;
@@ -176,7 +209,7 @@ function publishDeliveryEvent(string topic, DeliveryEvent sourceEvent, json payl
     }
     json summary = summaryResult;
     json envelope = {
-        eventId: uuid:createType4AsString(),
+        eventId: eventId,
         eventType: topic,
         occurredAt: time:utcToString(time:utcNow()),
         orderId: sourceEvent.orderId,
@@ -187,6 +220,10 @@ function publishDeliveryEvent(string topic, DeliveryEvent sourceEvent, json payl
     string raw = envelope.toJsonString();
     check producer->send({topic: topic, key: sourceEvent.orderId.toBytes(), value: raw.toBytes()});
     check producer->'flush();
+}
+
+function assignedEventId(string sourceEventId) returns string {
+    return "delivery-assigned:" + sourceEventId;
 }
 
 function publishManualDeliveryEvent(string orderId, string topic, json payload) returns error? {

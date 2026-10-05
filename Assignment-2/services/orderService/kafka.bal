@@ -78,3 +78,11 @@ function ensureProducer() returns kafka:Producer|error {
     orderProducer = created;
     return created;
 }
+
+function warmupKafkaProducer() returns error? {
+    kafka:Producer|error producer = ensureProducer();
+    if producer is error {
+        return producer;
+    }
+    check producer->'flush();
+}

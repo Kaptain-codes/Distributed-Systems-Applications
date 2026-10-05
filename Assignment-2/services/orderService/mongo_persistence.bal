@@ -10,6 +10,7 @@ configurable boolean durableStateEnabled = false;
 configurable string mongoUri = "mongodb://localhost:27017/orders";
 configurable int mongoSocketTimeoutMs = 3000;
 configurable int mongoConnectionTimeoutMs = 3000;
+configurable int durableOutboxMinAgeSeconds = 20;
 
 mongodb:Collection|error ordersCollection = error("MongoDB is not initialized");
 mongodb:Collection|error processedEventsCollection = error("MongoDB is not initialized");
@@ -152,11 +153,14 @@ function recoverDurableOutbox() returns error? {
         return;
     }
     mongodb:Collection collection = check outboxCollection;
+    string cutoff = time:utcToString(time:utcAddSeconds(time:utcNow(),
+        <time:Seconds> -durableOutboxMinAgeSeconds));
     stream<record {| anydata...; |}, error?>|mongodb:Error result =
-        collection->find({status: "PENDING"});
+        collection->find({status: "PENDING", updatedAt: {"$lt": cutoff}});
     if result is mongodb:Error {
         return result;
     }
+
     stream<record {| anydata...; |}, error?> records = result;
     while true {
         record {| record {| anydata...; |} value; |}|error? next = records.next();
@@ -181,9 +185,14 @@ function recoverDurableOutbox() returns error? {
                         log:printError("durable outbox status update failed", 'error = marked);
                     }
                 }
+
             }
         }
     }
+}
+
+function isDurableOutboxOldEnough(string updatedAt, string cutoff) returns boolean {
+    return updatedAt < cutoff;
 }
 
 function republishDurableOutbox() {
