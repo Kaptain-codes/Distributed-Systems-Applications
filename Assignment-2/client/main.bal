@@ -91,9 +91,10 @@ public function main(string... args) returns error? {
         io:println("4. Place order");
         io:println("5. Track active order");
         io:println("6. List my orders");
-        io:println("7. Simulate kitchen");
-        io:println("8. Simulate driver");
-        io:println("9. Cancel active order");
+        io:println("7. List notifications");
+        io:println("8. Simulate kitchen");
+        io:println("9. Simulate driver");
+        io:println("10. Cancel active order");
         io:println("0. Exit");
         io:print("Choose an option: ");
 
@@ -106,9 +107,10 @@ public function main(string... args) returns error? {
             "4" => { result = placeOrderInteractive(state); }
             "5" => { result = trackOrder(state, ["track"]); }
             "6" => { result = listOrders(state); }
-            "7" => { result = simulateKitchenInteractive(); }
-            "8" => { result = simulateDriverInteractive(); }
-            "9" => { result = cancelOrder(state); }
+            "7" => { result = listNotifications(state); }
+            "8" => { result = simulateKitchenInteractive(); }
+            "9" => { result = simulateDriverInteractive(); }
+            "10" => { result = cancelOrder(state); }
             "0" => { running = false; }
             _ => { io:println("Invalid option."); }
         }
@@ -362,24 +364,6 @@ function cancelOrder(ClientState state) returns error? {
     printOrder(result.body);
 }
 
-function settings(ClientState state, string[] args) returns error? {
-    if args.length() >= 2 && args[1] == "reset" {
-        check clearState();
-        io:println("Client state reset.");
-        return;
-    }
-    if args.length() >= 4 && args[1] == "set" {
-        if args[2] == "base-url" { state.baseUrl = args[3]; }
-        else if args[2] == "poll-ms" { state.pollMs = check int:fromString(args[3]); }
-        else if args[2] == "customer-id" { state.customerId = args[3]; }
-        else { return error("unknown setting"); }
-        check saveState(state);
-        io:println("Setting saved.");
-        return;
-    }
-    io:println(string `baseUrl=${state.baseUrl}\npollMs=${state.pollMs}\nstate=${statePath}`);
-}
-
 function simulate(ClientState state, string[] args) returns error? {
     if args.length() < 3 { return error("simulate requires kitchen or driver action"); }
     string area = args[1];
@@ -421,20 +405,6 @@ function simulate(ClientState state, string[] args) returns error? {
     printJson(result.body);
 }
 
-function autoDrive(ClientState state, string[] args) returns error? {
-    string? orderId = option(args, "--order") ?: state.activeOrderId;
-    if orderId is () { return error("auto-drive requires an active order"); }
-    string[] steps = ["accept", "preparing", "ready"];
-    foreach string step in steps {
-        ApiResult|error result = apiFetch(apiClient, "POST",
-            "/restaurant/orders/" + orderId + "/" + step);
-        if result is error { return result; }
-        io:println("auto-drive: " + step);
-        runtime:sleep(3);
-    }
-    io:println("auto-drive: kitchen sequence complete; use a registered driver for pickup.");
-}
-
 function isTerminal(json orderData) returns boolean {
     string status = fieldText(orderData, "status");
     return status == "DELIVERED" || status == "CANCELLED";
@@ -463,10 +433,4 @@ function requireString(string? value) returns string|error {
         return value;
     }
     return error("required value is missing");
-}
-
-function printUsage() {
-    io:println("Food Delivery Ballerina Client");
-    io:println("Commands: whoami, restaurants, menu, place, track, orders, notifications,");
-    io:println("         cancel, simulate, auto-drive, settings");
 }
