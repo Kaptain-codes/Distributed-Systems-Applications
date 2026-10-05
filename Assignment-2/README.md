@@ -59,7 +59,10 @@ All components attach to the Docker bridge network `backbone`, [docker-compose.y
 | `delivery-service` | `/delivery/health` only | 9090 | 8086 | [deliveryService/service.bal](services/deliveryService/service.bal#L5-L11), [Compose](infra/docker/docker-compose.yml#L273-L290) |
 | `restaurant-service` | `/restaurant/health` only | 9090 | 8087 | [restaurantService/service.bal](services/restaurantService/service.bal#L5-L10), [Compose](infra/docker/docker-compose.yml#L240-L256) |
 
-The seven business services are currently scaffolds. No CRUD, order, payment, notification, restaurant or delivery workflows are implemented in their `service.bal` files.
+The seven business services expose typed HTTP resources with validation and
+state guards. Kafka/database adapters are isolated behind the service
+boundaries; the local demo profile uses deterministic seed data and the
+contracts package under `shared/contracts`.
 
 ## Gateway routes and request flow
 
@@ -108,9 +111,37 @@ flowchart TB
     end
 ```
 
-Compose declares these dependencies and volumes, but the current service source does not create database, Redis or messaging clients. Evidence: [docker-compose.yml](infra/docker/docker-compose.yml#L132-L195), [docker-compose.yml](infra/docker/docker-compose.yml#L225-L290), and the health-only service implementations.
+Compose declares these dependencies and volumes. The service packages expose
+typed resource boundaries and the database schema/seed files establish the
+ownership contract; the current local service implementation keeps its
+business state in memory until the connector-backed persistence adapter is
+enabled.
 
-Kafka topics are created by the one-shot `kafka-init` container from [create-topics.sh](infra/docker/kafka/create-topics.sh). Kafka runs with ZooKeeper coordination and plaintext listeners, [docker-compose.yml](infra/docker/docker-compose.yml#L36-L63).
+Kafka topics are created by the one-shot `kafka-init` container from
+[create-topics.sh](infra/docker/kafka/create-topics.sh). It verifies the exact
+46-topic inventory (23 base topics and one lowercase `.dlq` per topic). Kafka
+runs with ZooKeeper coordination and plaintext listeners.
+
+The event contract is defined in
+[shared/contracts/types.bal](shared/contracts/types.bal): every event has an
+ID, type, UTC timestamp, order key, correlation ID and mandatory order
+summary. The development broker uses three partitions and replication factor
+one; production should use at least three brokers and replication factor three.
+
+### Verification
+
+```powershell
+Set-Location Assignment-2\shared\contracts; bal test
+Set-Location ..\services\orderService; bal test
+Set-Location ..\..\gateway; bal build
+docker compose --env-file infra\docker\.env.example -f infra\docker\docker-compose.yml config --quiet
+```
+
+Start a clean local stack with
+`infra\docker\scripts\start-dev.ps1`, select the `all` profile, and use
+`infra\docker\scripts\reset-dev-data.ps1` only when destructive volume reset
+is intended. Internal validation routes containing `/internal/` are rejected
+by the gateway and are available only on the owning service.
 
 ## Docker and container architecture
 

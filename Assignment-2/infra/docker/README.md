@@ -143,15 +143,16 @@ Current topics:
 - `orders.created`, `orders.confirmed`, `orders.preparing`, `orders.ready`
 - `orders.out_for_delivery`, `orders.delivered`, `orders.cancelled`,
   `orders.autocancelled`
-- `payments.completed`, `payments.failed`, `payments.cancelled`,
-  `payments.refunded`
+- `payments.completed`, `payment.requested`, `payments.failed`,
+  `payments.cancelled`, `payments.refunded`
 - `restaurant.accepted`, `restaurant.rejected`, `restaurant.preparing`,
   `restaurant.ready`
-- `delivery.assigned`, `delivery.not_assigned`, `delivery.completed`,
-  `delivery.cancelled`, `delivery.failed`
+- `delivery.assigned`, `delivery.picked_up`, `delivery.not_assigned`,
+  `delivery.completed`, `delivery.cancelled`, `delivery.failed`
 - Every base event topic has a lowercase `.dlq` companion. Keep the topic
-  contract in `kafka/create-topics.sh`; overlapping order/restaurant and
-  order/delivery events still require team ownership review.
+  contract in `kafka/create-topics.sh`; the initializer verifies exactly 46
+  topics before completing. `kafka/check-topics.sh` and
+  `scripts/check-topics.ps1` provide host-side verification.
 
 Add new topics to the `TOPICS` array in
 [`kafka/create-topics.sh`](kafka/create-topics.sh).

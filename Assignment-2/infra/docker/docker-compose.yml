@@ -16,6 +16,9 @@ services:
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
+      KAFKA_HEAP_OPTS: "-Xms256m -Xmx256m"
+    mem_limit: 512m
+    cpus: "1.0"
     ports:
       - "127.0.0.1:${ZOOKEEPER_PORT:-2181}:2181"
     healthcheck:
@@ -50,6 +53,9 @@ services:
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_HEAP_OPTS: "-Xms512m -Xmx512m"
+    mem_limit: 1g
+    cpus: "2.0"
     ports:
       - "127.0.0.1:${KAFKA_HOST_PORT:-29092}:29092"
     healthcheck:
@@ -86,7 +92,24 @@ services:
   gateway:
     build: ../../gateway
     profiles: ["order-customer", "restaurant-payment", "delivery", "notification-admin", "all"]
+    mem_limit: 512m
+    cpus: "1.0"
+    environment:
+      BAL_CONFIG_DATA: |
+        redisHost = "gateway-redis"
+        redisPort = 6379
+        redisPassword = "${GATEWAY_REDIS_PASSWORD:-}"
+        orderService = "http://order-service:9090"
+        customerService = "http://customer-service:9090"
+        restaurantService = "http://restaurant-service:9090"
+        paymentService = "http://payment-service:9090"
+        deliveryService = "http://delivery-service:9090"
+        notificationService = "http://notification-service:9090"
+        adminService = "http://admin-service:9090"
+        downstreamTimeout = ${GATEWAY_DOWNSTREAM_TIMEOUT:-10}
     depends_on:
+      gateway-redis:
+        condition: service_started
       order-service:
         condition: service_started
         required: false
@@ -118,15 +141,39 @@ services:
       start_period: 20s
     networks: [backbone]
 
+  gateway-redis:
+    image: redis:7.4-alpine
+    profiles: ["order-customer", "restaurant-payment", "delivery", "notification-admin", "all"]
+    ports:
+      - "127.0.0.1:${GATEWAY_REDIS_PORT:-6379}:6379"
+    volumes:
+      - gateway-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks: [backbone]
+
   # Wilgano
   order-service:
     build: ../../services/orderService
     profiles: ["order-customer", "all"]
+    mem_limit: 512m
+    cpus: "1.0"
+    environment:
+      BAL_CONFIG_DATA: |
+        kafkaRuntimeEnabled = true
+        kafkaBootstrap = "kafka:9092"
+        durableStateEnabled = true
+        testFailurePoint = "${ORDER_TEST_FAILURE_POINT:-}"
+        testFailureEventId = "${ORDER_TEST_FAILURE_EVENT_ID:-}"
+        mongoUri = "mongodb://order_app:${ORDER_DB_APP_PASSWORD}@order-db:27017/orders?authSource=orders"
     ports:
       - "127.0.0.1:${ORDER_SERVICE_PORT:-8081}:9090"
     depends_on:
       kafka-init:
-        condition: service_completed_successfully
+        condition: service_started
       order-db:
         condition: service_healthy
     healthcheck:
@@ -146,7 +193,7 @@ services:
       - "127.0.0.1:${CUSTOMER_SERVICE_PORT:-8082}:9090"
     depends_on:
       kafka-init:
-        condition: service_completed_successfully
+        condition: service_started
       customer-db:
         condition: service_healthy
     healthcheck:
@@ -161,11 +208,19 @@ services:
   admin-service:
     build: ../../services/adminService
     profiles: ["notification-admin", "all"]
+    mem_limit: 512m
+    cpus: "1.0"
     ports:
       - "127.0.0.1:${ADMIN_SERVICE_PORT:-8085}:9090"
+    environment:
+      BAL_CONFIG_DATA: |
+        kafkaRuntimeEnabled = true
+        kafkaBootstrap = "kafka:9092"
+        durableStateEnabled = true
+        mongoUri = "mongodb://${ADMIN_DB_USER:-admin_app}:${ADMIN_DB_APP_PASSWORD}@admin-db:27017/${ADMIN_DB_NAME:-admin}?authSource=${ADMIN_DB_NAME:-admin}"
     depends_on:
       kafka-init:
-        condition: service_completed_successfully
+        condition: service_started
       admin-db:
         condition: service_healthy
     healthcheck:
@@ -179,11 +234,17 @@ services:
   notification-service:
     build: ../../services/notificationService
     profiles: ["notification-admin", "all"]
+    mem_limit: 512m
+    cpus: "1.0"
+    environment:
+      BAL_CONFIG_DATA: |
+        kafkaRuntimeEnabled = true
+        kafkaBootstrap = "kafka:9092"
     ports:
       - "127.0.0.1:${NOTIFICATION_SERVICE_PORT:-8083}:9090"
     depends_on:
       kafka-init:
-        condition: service_completed_successfully
+        condition: service_started
       notification-db:
         condition: service_healthy
       notification-redis:
@@ -212,11 +273,17 @@ services:
   payment-service:
     build: ../../services/paymentService
     profiles: ["restaurant-payment", "all"]
+    mem_limit: 512m
+    cpus: "1.0"
+    environment:
+      BAL_CONFIG_DATA: |
+        kafkaRuntimeEnabled = true
+        kafkaBootstrap = "kafka:9092"
     ports:
       - "127.0.0.1:${PAYMENT_SERVICE_PORT:-8084}:9090"
     depends_on:
       kafka-init:
-        condition: service_completed_successfully
+        condition: service_started
       payment-db:
         condition: service_healthy
       payment-redis:
@@ -232,11 +299,17 @@ services:
   restaurant-service:
     build: ../../services/restaurantService
     profiles: ["restaurant-payment", "all"]
+    mem_limit: 512m
+    cpus: "1.0"
+    environment:
+      BAL_CONFIG_DATA: |
+        kafkaRuntimeEnabled = true
+        kafkaBootstrap = "kafka:9092"
     ports:
       - "127.0.0.1:${RESTAURANT_SERVICE_PORT:-8087}:9090"
     depends_on:
       kafka-init:
-        condition: service_completed_successfully
+        condition: service_started
       restaurant-db:
         condition: service_healthy
     healthcheck:
@@ -263,6 +336,12 @@ services:
   delivery-service:
     build: ../../services/deliveryService
     profiles: ["delivery", "all"]
+    mem_limit: 512m
+    cpus: "1.0"
+    environment:
+      BAL_CONFIG_DATA: |
+        kafkaRuntimeEnabled = true
+        kafkaBootstrap = "kafka:9092"
     ports:
       - "127.0.0.1:${DELIVERY_SERVICE_PORT:-8086}:9090"
     depends_on:
@@ -456,3 +535,4 @@ volumes:
   admin-db-data:
   payment-redis-data:
   notification-redis-data:
+  gateway-redis-data:

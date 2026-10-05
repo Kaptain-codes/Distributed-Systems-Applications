@@ -26,6 +26,14 @@ function testServiceWithEmptyName() returns error? {
     test:assertEquals(healthPayload, {status: "UP", 'service: "payment"});
 }
 
+@test:Config {}
+function testPaymentLookupReturnsCommonNotFoundError() returns error? {
+    http:Response response = check testClient->get("/payment/missing-payment");
+    test:assertEquals(response.statusCode, 404);
+    json payload = check response.getJsonPayload();
+    test:assertEquals(payload, {'error: "NOT_FOUND", message: "payment was not found"});
+}
+
 // After Suite Function
 @test:AfterSuite
 function afterSuiteFunc() {

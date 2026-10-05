@@ -26,6 +26,13 @@ function testServiceWithEmptyName() returns error? {
     test:assertEquals(healthPayload, {status: "UP", 'service: "customer"});
 }
 
+@test:Config {}
+function testCustomerValidationRules() {
+    test:assertFalse(validText(""));
+    test:assertFalse(validText("   "));
+    test:assertTrue(validText("A customer"));
+}
+
 // After Suite Function
 @test:AfterSuite
 function afterSuiteFunc() {

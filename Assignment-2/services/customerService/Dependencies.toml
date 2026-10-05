@@ -70,7 +70,7 @@ dependencies = [
 [[package]]
 org = "ballerina"
 name = "http"
-version = "2.16.8"
+version = "2.16.9"
 dependencies = [
 	{org = "ballerina", name = "auth"},
 	{org = "ballerina", name = "cache"},
@@ -343,3 +343,4 @@ dependencies = [
 modules = [
 	{org = "wykva", packageName = "customerService", moduleName = "customerService"}
 ]
+

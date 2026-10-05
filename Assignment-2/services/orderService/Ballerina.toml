@@ -4,5 +4,9 @@ name = "orderService"
 version = "0.1.0"
 distribution = "2201.13.4"
 
+[dependencies]
+"ballerinax/kafka" = "4.6.6"
+"ballerinax/mongodb" = "5.2.4"
+
 [build-options]
 observabilityIncluded = true

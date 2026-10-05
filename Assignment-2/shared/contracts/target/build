@@ -1,0 +1,77 @@
+{
+  "last_build_time": 1791005910978,
+  "last_update_time": 1790926924856,
+  "last_bal_toml_update_time": 1790922189846,
+  "distribution_version": "2201.13.4",
+  "last_modified_time": {
+    "contracts": 1790926009185
+  },
+  "last_build_options": {
+    "skipTests": false,
+    "compilationOptions": {
+      "observabilityIncluded": true,
+      "cloud": "",
+      "dumpGraph": false,
+      "dumpRawGraphs": false
+    }
+  },
+  "src_meta_info": [
+    {
+      "file": "C:\\Users\\wykva\\IdeaProjects\\Distributed-Systems-Applications\\Assignment-2\\shared\\contracts\\Ballerina.toml",
+      "hash": "e11ff27e9831fd50af70ee5d8948cdf38c8fc2c47cdd3cf837e10b2502ffb8b7",
+      "size": 148,
+      "lastModifiedTime": 1790922189846
+    },
+    {
+      "file": "C:\\Users\\wykva\\IdeaProjects\\Distributed-Systems-Applications\\Assignment-2\\shared\\contracts\\types.bal",
+      "hash": "4a6e189236f51914932117976726e36832a41e20c6ecfaf98eec253e94c8f7f0",
+      "size": 2508,
+      "lastModifiedTime": 1790926009185
+    }
+  ],
+  "test_src_meta_info": [
+    {
+      "file": "C:\\Users\\wykva\\IdeaProjects\\Distributed-Systems-Applications\\Assignment-2\\shared\\contracts\\tests\\contracts_test.bal",
+      "hash": "bed428ac3c6428d450b7dca78ef8305c3b4d0f368fc1fa51779d4c0dfdb412d5",
+      "size": 464,
+      "lastModifiedTime": 1790922189892
+    }
+  ],
+  "settings_meta_info": {
+    "file": "C:\\Users\\wykva\\.ballerina\\Settings.toml",
+    "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "size": 0,
+    "lastModifiedTime": 1782327368914
+  },
+  "ballerina_toml_meta_info": {
+    "file": "C:\\Users\\wykva\\IdeaProjects\\Distributed-Systems-Applications\\Assignment-2\\shared\\contracts\\Ballerina.toml",
+    "hash": "e11ff27e9831fd50af70ee5d8948cdf38c8fc2c47cdd3cf837e10b2502ffb8b7",
+    "size": 148,
+    "lastModifiedTime": 1790922189846
+  },
+  "test_artifact_meta_info": [
+    {
+      "file": "C:\\Users\\wykva\\IdeaProjects\\Distributed-Systems-Applications\\Assignment-2\\shared\\contracts\\target\\backup\\cache\\tests_cache\\test_suit.json",
+      "hash": "490853ec564de1f2e28661c169523a4860e2ab5bd3f5deb19f6f2a7c648a2401",
+      "size": 4600,
+      "lastModifiedTime": 1791005911078
+    },
+    {
+      "file": "C:\\Users\\wykva\\IdeaProjects\\Distributed-Systems-Applications\\Assignment-2\\shared\\contracts\\target\\backup\\cache\\distributed\\contracts\\1.0.0\\java21\\distributed-contracts-1.0.0-testable.jar",
+      "hash": "b6036953454dc29efc470fd1235bfd0da09ae392105785861229149043c9d308",
+      "size": 32121,
+      "lastModifiedTime": 1791005910953
+    },
+    {
+      "file": "C:\\Users\\wykva\\IdeaProjects\\Distributed-Systems-Applications\\Assignment-2\\shared\\contracts\\target\\backup\\cache\\distributed\\contracts\\1.0.0\\java21\\distributed-contracts-1.0.0.jar",
+      "hash": "5fae84f47fa8cd12c55680e8ea22aa77a99fbc3251c2cd153cf9e0a8c3a910fa",
+      "size": 81154,
+      "lastModifiedTime": 1791005910917
+    }
+  ],
+  "test_class_path": "C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\time\\2.8.1\\java21\\platform\\java21\\time-native-2.8.1.jar;C:\\PROGRA~1\\BALLER~1\\DISTRI~1\\BALLER~1.4\\repo\\bala\\ballerina\\test\\0.0.0\\any\\platform\\java21\\testerina-core-2201.13.4.jar;C:\\PROGRA~1\\BALLER~1\\DISTRI~1\\BALLER~1.4\\bin\\..\\bre\\lib\\asm-commons-9.7.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\observe\\1.7.2\\java21\\platform\\java21\\observe-native-1.7.2.jar;C:\\PROGRA~1\\BALLER~1\\DISTRI~1\\BALLER~1.4\\bin\\..\\bre\\lib\\ballerina-lang-2201.13.4.jar;C:\\PROGRA~1\\BALLER~1\\DISTRI~1\\BALLER~1.4\\bin\\..\\bre\\lib\\java-diff-utils-4.5.jar;C:\\PROGRA~1\\BALLER~1\\DISTRI~1\\BALLER~1.4\\bin\\..\\bre\\lib\\testerina-runtime-2201.13.4.jar;C:\\PROGRA~1\\BALLER~1\\DISTRI~1\\BALLER~1.4\\bin\\..\\bre\\lib\\asm-9.7.jar;C:\\PROGRA~1\\BALLER~1\\DISTRI~1\\BALLER~1.4\\repo\\bala\\ballerinai\\observe\\0.0.0\\java21\\platform\\java21\\observe-internal-native-1.7.1.jar;C:\\PROGRA~1\\BALLER~1\\DISTRI~1\\BALLER~1.4\\bin\\..\\bre\\lib\\ballerina-rt-2201.13.4.jar;C:\\PROGRA~1\\BALLER~1\\DISTRI~1\\BALLER~1.4\\bin\\..\\bre\\lib\\org.jacoco.report-0.8.12.jar;C:\\PROGRA~1\\BALLER~1\\DISTRI~1\\BALLER~1.4\\bin\\..\\bre\\lib\\org.jacoco.core-0.8.12.jar;C:\\PROGRA~1\\BALLER~1\\DISTRI~1\\BALLER~1.4\\bin\\..\\bre\\lib\\asm-tree-9.7.jar;C:\\PROGRA~1\\BALLER~1\\DISTRI~1\\BALLER~1.4\\bin\\..\\bre\\lib\\testerina-core-2201.13.4.jar;C:\\PROGRA~1\\BALLER~1\\DISTRI~1\\BALLER~1.4\\repo\\bala\\ballerina\\test\\0.0.0\\any\\platform\\java21\\java-diff-utils-4.5.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\observe\\1.7.2\\java21\\platform\\java21\\opentelemetry-sdk-trace-1.32.0.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\observe\\1.7.2\\java21\\platform\\java21\\opentelemetry-semconv-1.21.0-alpha.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\observe\\1.7.2\\java21\\platform\\java21\\opentelemetry-sdk-common-1.32.0.jar;C:\\Users\\wykva\\.ballerina\\repositories\\central.ballerina.io\\bala\\ballerina\\observe\\1.7.2\\java21\\platform\\java21\\opentelemetry-sdk-testing-1.32.0.jar",
+  "imports": [
+    "ballerina/time",
+    "ballerina/test"
+  ]
+}

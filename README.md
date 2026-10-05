@@ -1,61 +1,142 @@
 # Distributed Systems Applications
 
-Architecture and infrastructure documentation for the two Ballerina assignments in this repository.
+This repository contains two Ballerina assignments. The submission runtime
+described below is [Assignment 2](Assignment-2/), a Docker Compose food
+delivery system.
 
-## Repository scope
+## Prerequisites
 
-| Assignment | System | Primary runtime | Persistence/dependencies |
-| --- | --- | --- | --- |
-| [Assignment 1](Assignment-1/README.md) | Asset and institution HTTP service plus RentalService gRPC contract/server | Ballerina 2201.13.4 | In-memory Ballerina tables; no database |
-| [Assignment 2](Assignment-2/README.md) | Food-delivery gateway and service scaffold | Ballerina 2201.13.4 packages, Docker build image 2201.13.5, Java 21 runtime | Docker Compose with Kafka/ZooKeeper, MySQL, MongoDB, MSSQL and Redis |
+- Windows PowerShell, Git, and Docker Desktop with Compose v2.
+- At least **8 GB of Docker Desktop memory** for the full `all` profile.
+- Ballerina distribution `2201.13.4` for local package builds and tests.
+- A clean Docker host with the required ports available.
 
-## High-level architecture
+The resource-constrained minimal lifecycle stack is:
+`zookeeper`, `kafka`, `kafka-init`, `order-db`, `order-service`,
+`restaurant-db`, `restaurant-service`, `payment-db`, `payment-redis`,
+`payment-service`, `delivery-db`, `delivery-service`, `gateway-redis`, and
+`gateway`. The full profile additionally starts customer, notification, and
+admin services and their stores.
 
-```mermaid
-flowchart LR
-    subgraph C[Client Layer]
-        HTTPClient[HTTP clients]
-        GRPCClient[gRPC clients]
-    end
-    subgraph G[Gateway/API Layer]
-        Gateway[Assignment 2 gateway\nHTTP :8080]
-    end
-    subgraph B[Business Services]
-        A1HTTP[Assignment 1 library service\nHTTP :9090]
-        A1GRPC[Assignment 1 RentalService\ngRPC :9090]
-        A2[Assignment 2 order, customer,\nnotification, admin, payment,\nrestaurant and delivery services\nHTTP :9090 each]
-    end
-    subgraph D[Data Layer]
-        Tables[Assignment 1 in-memory tables]
-        Stores[Assignment 2 MySQL, MongoDB,\nMSSQL and Redis containers]
-    end
-    subgraph E[External Infrastructure]
-        Kafka[Kafka :9092/:29092]
-        ZK[ZooKeeper :2181]
-    end
-    HTTPClient --> Gateway
-    GRPCClient --> A1GRPC
-    HTTPClient --> A1HTTP
-    Gateway --> A2
-    A1HTTP --> Tables
-    A2 -. provisioned by Compose; not wired in current source .-> Stores
-    A2 -. provisioned topics; no current producers/consumers .-> Kafka
-    Kafka --> ZK
+## Assignment 2 commands
+
+Run these commands from `Assignment-2\infra\docker`:
+
+```powershell
+.\scripts\start-dev.ps1
+# Select 5 for the complete stack, or select the required team profile.
+
+.\scripts\stop-containers.ps1
+.\scripts\start-containers.ps1
+
+# Destructive reset: prompts for a profile and the literal RESET confirmation.
+.\scripts\reset-dev-data.ps1
+
+# The start script creates .env from .env.example and generates local passwords.
+# To seed from a clean volume, reset first, then start the selected profile.
+docker compose --profile all up -d --build
+docker compose --profile all down
 ```
 
-The diagrams and claims in this repository documentation are derived from the source, package manifests, Dockerfiles, Compose file, scripts and tests. Assignment 2’s databases, Redis instances and Kafka topics are provisioned by infrastructure, but the current service source exposes only health endpoints and does not import those clients.
+Check the Kafka inventory with `.\scripts\check-topics.ps1` from a host that
+has the Kafka CLI, or run the equivalent script inside the Kafka container.
+The initializer verifies 46 topics: 23 base topics and 23 lowercase `.dlq`
+companions.
 
-## Development prerequisites
+## API summary
 
-- Ballerina and the Ballerina VS Code extension for source work.
-- Docker Desktop and PowerShell for Assignment 2 Compose development.
-- Git.
+Use the gateway at `http://localhost:8080`. The gateway forwards
+`/api/{service}/...` to the matching service and preserves the method, body,
+query string, selected headers, status, and response body.
 
-See the assignment documents for commands, ports, profiles, API entry points, health checks and troubleshooting.
+| Area | Gateway paths |
+| --- | --- |
+| Order | `/api/order/orders`, `/api/order/orders/{orderId}`, `/api/order/orders/{orderId}/cancel` |
+| Restaurant | `/api/restaurant/restaurants`, `/api/restaurant/restaurants/{restaurantId}/orders`, `/api/restaurant/orders/{orderId}/accept`, `/reject`, `/preparing`, `/ready` |
+| Payment | `/api/payment/payments/{orderId}` |
+| Delivery | `/api/delivery/drivers`, `/api/delivery/drivers/{driverId}/status`, `/api/delivery/deliveries/{orderId}`, `/pickup`, `/complete`, `/fail` |
+| Customer | `/api/customer/...` |
+| Notification | `/api/notification/...` |
+| Admin | `/api/admin/...`, including `/api/admin/dlq` |
+| Gateway | `GET /api/health` |
 
-## Verification notes
+Each application listens on port 9090 inside Docker. Host-side direct ports
+are documented in [Assignment-2/infra/docker/README.md](Assignment-2/infra/docker/README.md).
 
-- Assignment 1 uses process-local tables, so data is lost when the process restarts.
-- Assignment 2 is local Docker Compose infrastructure; no CI/CD workflow, production deployment manifest, Kubernetes manifest, Helm chart or Terraform configuration is present.
-- Compose health checks validate process/container readiness. Assignment 2 application health endpoints return static `UP` responses and do not verify database, Kafka or Redis connectivity.
-- Assignment 2 service tests currently target `/greeting`, while implementations expose `/.../health`; see [Assignment-2/README.md](Assignment-2/README.md#known-inconsistencies).
+## Kafka topic contract
+
+All events use the order ID as the Kafka key. Consumers deduplicate event IDs
+because delivery is at-least-once.
+
+| Topic family | Producer | Consumer(s) |
+| --- | --- | --- |
+| `orders.created` | order-service | restaurant-service |
+| `restaurant.accepted`, `restaurant.rejected`, `restaurant.preparing`, `restaurant.ready` | restaurant-service | order-service |
+| `payment.requested` | order-service | payment-service |
+| `payments.completed`, `payments.failed`, `payments.refunded` | payment-service | order-service |
+| `orders.confirmed`, `orders.preparing`, `orders.ready` | order-service | restaurant-service, delivery-service as applicable |
+| `delivery.assigned`, `delivery.not_assigned`, `delivery.picked_up`, `delivery.completed`, `delivery.failed`, `delivery.cancelled` | delivery-service | order-service |
+| `orders.out_for_delivery`, `orders.delivered`, `orders.cancelled`, `orders.autocancelled` | order-service | relevant downstream consumers and admin audit |
+| Every base topic with `.dlq` suffix | failed consumer/DLQ handling | admin-service replay/audit |
+
+The exact topic names are in [expected-topics.txt](Assignment-2/infra/docker/kafka/expected-topics.txt).
+
+## Configuration defaults
+
+Defaults are committed without secrets in
+[.env.example](Assignment-2/infra/docker/.env.example). The local
+[.env](Assignment-2/infra/docker/.env) is ignored and generated/maintained
+locally. Important defaults include:
+
+| Variable | Default |
+| --- | --- |
+| `GATEWAY_PORT` | `8080` |
+| `ORDER_SERVICE_PORT` | `8081` |
+| `GATEWAY_DOWNSTREAM_TIMEOUT` | `10` seconds |
+| `KAFKA_HOST_PORT` | `29092` |
+| `COMPOSE_PROJECT_NAME` | `distributed_food_delivery_system` |
+
+## Demo script
+
+With the stack healthy, run the acceptance scripts from
+`Assignment-2\infra\docker`:
+
+```powershell
+.\scripts\test-at-1.ps1
+.\scripts\test-at-2.ps1 # or .\scripts\test-at-3.ps1
+.\scripts\test-at-4.ps1
+.\scripts\test-at-5.ps1
+```
+
+The scripts create fresh orders, drive the HTTP lifecycle, and print Kafka
+consumer output with timestamps, keys, event IDs, distinct topics, duplicate
+redelivery notices, final status, and payment status.
+
+## Ownership
+
+| Area | Owner |
+| --- | --- |
+| Gateway and API contracts | To be completed by team |
+| Order state machine and persistence | To be completed by team |
+| Restaurant and payment services | To be completed by team |
+| Delivery and customer services | To be completed by team |
+| Kafka, Compose, and infrastructure | To be completed by team |
+| Documentation and acceptance evidence | To be completed by team |
+
+## Known limitations
+
+- Restaurant, payment, delivery, notification, and customer business state is
+  process-local in the current demo; only order and admin state is durable.
+- AT-6 through AT-10 were not executed in the final acceptance window.
+- AT-9 was not run.
+- DLQ replay is an extra capability beyond decision 5.
+- Redelivered Kafka records with the same event ID are expected under
+  at-least-once delivery and are deduplicated by event ID.
+- Performance on the development laptop was slow under memory pressure; no
+  production performance claim is made.
+- Tier 3 status: the INF-2 topic check is implemented by the topic-check
+  script; idempotency is implemented and partly verified; the order service
+  implements an outbox.
+
+See [Assignment-2/docs/requirements-traceability.md](Assignment-2/docs/requirements-traceability.md)
+for the evidence-qualified verification matrix.
