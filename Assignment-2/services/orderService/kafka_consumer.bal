@@ -297,10 +297,11 @@ function applyRuntimeEvent(RuntimeEventEnvelope event) returns error? {
     }
     Order transitioned = atomicResult;
     orders[event.orderId] = transitioned;
+    boolean statusChanged = transitioned.status != current.status;
     string orderTopic = transitioned.status == "CANCELLED" ? "orders.cancelled" :
         "orders." + transitioned.status.toLowerAscii();
     recordEvent(event.orderId, orderTopic, transitioned, event.eventId);
-    if event.eventType != "restaurant.accepted" {
+    if statusChanged && event.eventType != "restaurant.accepted" {
         error? orderPublished = publishDerivedOrderEvent(orderTopic, event, transitioned);
         if orderPublished is error {
             return orderPublished;
