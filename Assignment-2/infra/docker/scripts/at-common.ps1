@@ -127,7 +127,7 @@ function Get-KafkaRecords([string]$topic, [string]$id) {
         Sort-Object -Unique)
     foreach ($partition in $partitions) {
         $startOffset = $script:KafkaStartOffsets["$topic`:$partition"]
-        $partitionLines = @(docker exec $KafkaContainer bash -lc "kafka-console-consumer --bootstrap-server localhost:9092 --topic $topic --partition $partition --offset $startOffset --timeout-ms 1500 --property print.timestamp=true --property print.key=true 2>/dev/null")
+        $partitionLines = @(docker exec $KafkaContainer bash -lc "timeout 4s kafka-console-consumer --bootstrap-server localhost:9092 --topic $topic --partition $partition --offset $startOffset --timeout-ms 1000 --property print.timestamp=true --property print.key=true 2>/dev/null || true")
         $lines += $partitionLines
     }
     $records = @()
