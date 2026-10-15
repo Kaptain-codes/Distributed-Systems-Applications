@@ -46,8 +46,8 @@ final kafka:ConsumerConfiguration orderConsumerConfiguration = {
     autoCommit: false,
     pollingInterval: 1,
     maxPollRecords: 1,
-    sessionTimeout: 10000,
-    heartBeatInterval: 3000,
+    sessionTimeout: 10,
+    heartBeatInterval: 3,
     maxPollInterval: 120000
 };
 

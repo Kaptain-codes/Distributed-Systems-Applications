@@ -21,7 +21,7 @@ The current remote baseline includes the admin/notification service refactor fro
 ### Modified tracked files
 
 - `Assignment-2\README.md`
-- `Assignment-2\debug.md` (canonical consolidated debug record)
+- `Assignment-2\plan\debug.md` (canonical consolidated debug record)
 - `Assignment-2\infra\docker\README.md`
 - `Assignment-2\infra\docker\initdb\delivery-db\01-schema.sql`
 - `Assignment-2\infra\docker\scripts\reset-dev-data.ps1`

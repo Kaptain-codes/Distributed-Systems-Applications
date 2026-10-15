@@ -13,7 +13,7 @@ function Publish-DuplicateReady([string]$eventJson, [int]$count) {
         $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($line))
         $jobs += Start-Job -ArgumentList $KafkaContainer, $encoded -ScriptBlock {
             param($container, $encodedLine)
-            docker exec $container bash -lc "echo $encodedLine | base64 -d | kafka-console-producer --bootstrap-server localhost:9092 --topic restaurant.ready --property parse.key=true --property key.separator='|'"
+            docker exec $container bash -lc "echo $encodedLine | base64 -d | kafka-console-producer --bootstrap-server kafka:9092 --topic restaurant.ready --property parse.key=true --property key.separator='|'"
         }
     }
     $jobs | Wait-Job | Out-Null

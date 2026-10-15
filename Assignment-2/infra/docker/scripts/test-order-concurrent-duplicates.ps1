@@ -21,7 +21,7 @@ function Invoke-MongoJson([string] $expression) {
 }
 
 function Get-GroupOffset([string] $topic) {
-    $output = docker exec $KafkaContainer kafka-consumer-groups --bootstrap-server localhost:9092 `
+    $output = docker exec $KafkaContainer kafka-consumer-groups --bootstrap-server kafka:9092 `
         --describe --group order-service 2>$null
     $lines = $output | Where-Object { $_ -match "\s$topic\s" }
     if (-not $lines) {
@@ -50,7 +50,7 @@ function Wait-Healthy([string] $container) {
 
 function Publish-KeyedEvent([string] $key, [string] $payload) {
     docker exec $KafkaContainer bash -lc `
-        "printf '%s\n' '$key|$payload' | kafka-console-producer --bootstrap-server localhost:9092 --topic $topic --property parse.key=true --property key.separator='|'" |
+        "printf '%s\n' '$key|$payload' | kafka-console-producer --bootstrap-server kafka:9092 --topic $topic --property parse.key=true --property key.separator='|'" |
         Out-Null
 }
 
@@ -102,13 +102,13 @@ try {
         Start-Job -ArgumentList $event -ScriptBlock {
             param($payload)
             docker exec distributed_food_delivery_system-kafka-1 bash -lc `
-                "printf '%s\n' 'duplicate-key-a|$payload' | kafka-console-producer --bootstrap-server localhost:9092 --topic restaurant.accepted --property parse.key=true --property key.separator='|'" |
+                "printf '%s\n' 'duplicate-key-a|$payload' | kafka-console-producer --bootstrap-server kafka:9092 --topic restaurant.accepted --property parse.key=true --property key.separator='|'" |
                 Out-Null
         }
         Start-Job -ArgumentList $event -ScriptBlock {
             param($payload)
             docker exec distributed_food_delivery_system-kafka-1 bash -lc `
-                "printf '%s\n' 'duplicate-key-b|$payload' | kafka-console-producer --bootstrap-server localhost:9092 --topic restaurant.accepted --property parse.key=true --property key.separator='|'" |
+                "printf '%s\n' 'duplicate-key-b|$payload' | kafka-console-producer --bootstrap-server kafka:9092 --topic restaurant.accepted --property parse.key=true --property key.separator='|'" |
                 Out-Null
         }
     )

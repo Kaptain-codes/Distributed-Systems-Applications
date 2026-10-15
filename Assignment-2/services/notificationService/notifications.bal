@@ -15,7 +15,7 @@ const string CHANNEL_IN_APP = "IN_APP";
 const string TYPE_ORDER_STATUS = "ORDER_STATUS";
 
 // A single notification as stored and returned by the HTTP API.
-type Notification record {|
+public type Notification record {|
     string id;
     string recipientType;
     string recipientId;
@@ -29,8 +29,41 @@ type Notification record {|
     string? readAt = ();
 |};
 
-// All notifications, keyed by notification id.
+// In-memory notifications are used when durable state is disabled.
 map<Notification> notifications = {};
+
+type NotificationRepository object {
+    public function save(Notification item) returns error?;
+    public function getAll() returns map<Notification>|error;
+    public function getForRecipient(string recipientId) returns Notification[]|error;
+    public function getById(string id) returns Notification|error?;
+};
+
+class InMemoryNotificationRepository {
+    *NotificationRepository;
+
+    public function save(Notification item) returns error? {
+        notifications[item.id] = item;
+    }
+
+    public function getAll() returns map<Notification> {
+        return notifications.clone();
+    }
+
+    public function getForRecipient(string recipientId) returns Notification[] {
+        Notification[] result = [];
+        foreach Notification item in notifications {
+            if item.recipientId == recipientId {
+                result.push(item);
+            }
+        }
+        return result;
+    }
+
+    public function getById(string id) returns Notification? {
+        return notifications[id];
+    }
+}
 
 # Creates an in-app order-status notification and stores it.
 #
@@ -41,7 +74,7 @@ map<Notification> notifications = {};
 # + message - text shown to the recipient
 # + return - the stored notification
 function addNotification(string recipientType, string recipientId, string orderId,
-        string sourceEventId, string message) returns Notification {
+        string sourceEventId, string message) returns Notification|error {
     Notification item = {
         id: uuid:createType4AsString(),
         recipientType: recipientType,
@@ -53,7 +86,7 @@ function addNotification(string recipientType, string recipientId, string orderI
         sourceEventId: sourceEventId,
         createdAt: time:utcToString(time:utcNow())
     };
-    notifications[item.id] = item;
+    check notificationRepository.save(item);
     return item;
 }
 
@@ -61,12 +94,6 @@ function addNotification(string recipientType, string recipientId, string orderI
 //
 // + recipientId - customer or restaurant id
 // + return - matching notifications, in store order
-function notificationsFor(string recipientId) returns json[] {
-    json[] result = [];
-    foreach Notification item in notifications {
-        if item.recipientId == recipientId {
-            result.push(item);
-        }
-    }
-    return result;
+function notificationsFor(string recipientId) returns Notification[]|error {
+    return notificationRepository.getForRecipient(recipientId);
 }

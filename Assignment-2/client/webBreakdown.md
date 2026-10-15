@@ -33,7 +33,7 @@ implementation is split into:
 | [`style.css`](./style.css) | Visual system, layout, state badges, responsive behavior, customer page transitions |
 | [`app.js`](./app.js) | State, API calls, identity, rendering, polling, simulator behavior, mode routing |
 | [`README-UI.md`](./README-UI.md) | Setup, configuration, demo instructions, and limitations |
-| [`webDebug.md`](./webDebug.md) | Browser/API debugging evidence and validation results |
+| [`webDebug.md`](../plan/webDebug.md) | Browser/API debugging evidence and validation results |
 
 ---
 
@@ -558,4 +558,4 @@ The implementation has been checked for:
 
 The customer address contract and gateway CORS issue were fixed and
 verified. The remaining end-to-end blocker is order-service readiness, which
-is recorded in [`webDebug.md`](./webDebug.md).
+is recorded in [`webDebug.md`](../plan/webDebug.md).

@@ -105,6 +105,9 @@ $Profiles = @{
 if ($Profile) {
     $TargetProfile = $Profile
 } else {
+    if ([Console]::IsInputRedirected) {
+        throw "A profile is required when running non-interactively. Use -Profile order-customer, notification-admin, restaurant-payment, delivery, or all."
+    }
     $Choice = Read-Host "Select a profile [1-5]"
     if (-not $Profiles.ContainsKey($Choice)) {
         Write-Host "Selection aborted: choose a number from 1 to 5." -ForegroundColor Red

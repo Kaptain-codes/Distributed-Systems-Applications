@@ -91,7 +91,10 @@ kind: Deployment
 metadata:
   name: order-service
 spec:
-  replicas: 2
+  # TODO(decision): run 1 replica until multi-instance recovery jobs are verified.
+  # With 2 replicas, the outbox recovery job runs concurrently in both pods;
+  # verify the outbox row-claim logic (row lock or claim column) before scaling.
+  replicas: 1
   selector: {matchLabels: {app: order-service}}
   template:
     metadata: {labels: {app: order-service}}

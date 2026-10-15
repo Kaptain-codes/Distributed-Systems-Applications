@@ -3,16 +3,16 @@ import ballerina/time;
 import ballerina/uuid;
 
 type ErrorBody record {| string 'error; string message; |};
-type Payment record {| string paymentId; string orderId; decimal amount; string currency = "NAD";
+public type Payment record {| string paymentId; string orderId; decimal amount; string currency = "NAD";
     string method = "CARD"; string status = "PENDING"; string createdAt; string updatedAt; |};
 type PaymentRequest record {| string orderId; decimal amount; string currency = "NAD";
-    string method = "CARD"; |};
+    string method = "CARD"; string? customerId = (); |};
 type SimulationRequest record {| boolean success = true; string? reason = (); |};
-
-map<Payment> payments = {};
 
 service /payment on new http:Listener(9090) {
     function init() returns error? {
+        check initPaymentRepository();
+        initializePaymentRedisClient();
         return startPaymentKafkaRuntime();
     }
 
@@ -28,12 +28,15 @@ service /payment on new http:Listener(9090) {
         string now = time:utcToString(time:utcNow());
         Payment payment = {paymentId: uuid:createType4AsString(), orderId: req.orderId,
             amount: req.amount, currency: req.currency, method: req.method, createdAt: now, updatedAt: now};
-        payments[payment.paymentId] = payment;
+        error? saved = paymentRepository.save(payment, req.customerId);
+        if saved is error { return errorResponse(503, "DATABASE_ERROR", "payment could not be saved"); }
         return payment;
     }
 
     resource function get [string paymentId]() returns json|http:Response {
-        Payment? payment = payments[paymentId];
+        Payment|error? paymentResult = paymentRepository.getById(paymentId);
+        if paymentResult is error { return errorResponse(503, "DATABASE_ERROR", "payment lookup failed"); }
+        Payment? payment = paymentResult;
         if payment is () { return errorResponse(404, "NOT_FOUND", "payment was not found"); }
         return payment;
     }
@@ -43,7 +46,9 @@ service /payment on new http:Listener(9090) {
     }
 
     resource function post [string paymentId]/simulate(http:Request req) returns json|http:Response {
-        Payment? current = payments[paymentId];
+        Payment|error? currentResult = paymentRepository.getById(paymentId);
+        if currentResult is error { return errorResponse(503, "DATABASE_ERROR", "payment lookup failed"); }
+        Payment? current = currentResult;
         if current is () { return errorResponse(404, "NOT_FOUND", "payment was not found"); }
         if current.status != "PENDING" {
             return errorResponse(409, "INVALID_STATE", "only pending payments can be simulated");
@@ -58,17 +63,17 @@ service /payment on new http:Listener(9090) {
         Payment next = current.clone();
         next.status = simulation.success ? "COMPLETED" : "FAILED";
         next.updatedAt = time:utcToString(time:utcNow());
-        payments[paymentId] = next;
+        error? saved = paymentRepository.save(next);
+        if saved is error { return errorResponse(503, "DATABASE_ERROR", "payment could not be saved"); }
         return next;
     }
 }
 
 function lookupByOrderId(string orderId) returns json|http:Response {
-    foreach Payment payment in payments {
-        if payment.orderId == orderId {
-            return payment;
-        }
-    }
+    Payment|error? paymentResult = paymentRepository.getByOrderId(orderId);
+    if paymentResult is error { return errorResponse(503, "DATABASE_ERROR", "payment lookup failed"); }
+    Payment? payment = paymentResult;
+    if payment is Payment { return payment; }
     return errorResponse(404, "NOT_FOUND", "payment was not found");
 }
 

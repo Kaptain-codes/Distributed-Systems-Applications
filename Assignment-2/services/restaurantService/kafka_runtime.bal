@@ -129,7 +129,11 @@ function handleRestaurantRecord(kafka:Consumer consumer, kafka:AnydataConsumerRe
                     items: lines,
                     status: "PENDING_DECISION"
                 };
-                kitchenOrders[payload.orderId] = kitchen;
+                error? saved = restaurantRepository.saveKitchenOrder(kitchen);
+                if saved is error {
+                    log:printError("restaurant order persistence failed", 'error = saved);
+                    return;
+                }
             } else {
                 log:printError("restaurant order payload conversion failed", 'error = payload);
             }
@@ -137,16 +141,37 @@ function handleRestaurantRecord(kafka:Consumer consumer, kafka:AnydataConsumerRe
             log:printError("restaurant event payload extraction failed", 'error = payloadJson);
         }
     } else if event.eventType == "orders.cancelled" || event.eventType == "orders.autocancelled" {
-        KitchenOrder? kitchen = kitchenOrders[event.orderId];
+        KitchenOrder|error? kitchenResult = restaurantRepository.getKitchenOrder(event.orderId);
+        if kitchenResult is error {
+            log:printError("restaurant order lookup failed during cancellation",
+                'error = kitchenResult);
+            return;
+        }
+        KitchenOrder? kitchen = kitchenResult;
         if kitchen is KitchenOrder && kitchen.status != "READY" && kitchen.status != "CANCELLED" {
             kitchen.status = "CANCELLED";
-            kitchenOrders[event.orderId] = kitchen;
+            error? saved = restaurantRepository.saveKitchenOrder(kitchen);
+            if saved is error {
+                log:printError("restaurant cancellation persistence failed", 'error = saved);
+                return;
+            }
         }
     } else if event.eventType == "orders.confirmed" {
-        KitchenOrder? kitchen = kitchenOrders[event.orderId];
+        KitchenOrder|error? kitchenResult = restaurantRepository.getKitchenOrder(event.orderId);
+        if kitchenResult is error {
+            log:printError("restaurant order lookup failed during confirmation",
+                'error = kitchenResult);
+            return;
+        }
+        KitchenOrder? kitchen = kitchenResult;
         if kitchen is KitchenOrder && kitchen.status == "ACCEPTED" {
             kitchen.paymentConfirmed = true;
-            kitchenOrders[event.orderId] = kitchen;
+            error? saved = restaurantRepository.saveKitchenOrder(kitchen);
+            if saved is error {
+                log:printError("restaurant payment confirmation persistence failed",
+                    'error = saved);
+                return;
+            }
         }
     }
     restaurantProcessedEvents[event.eventId] = true;
@@ -176,7 +201,6 @@ function publishRestaurantEvent(string eventType, RestaurantEvent eventSource, j
     };
     string envelopeJson = envelope.toJsonString();
     check producer->send({topic: eventType, key: eventSource.orderId.toBytes(), value: envelopeJson.toBytes()});
-    check producer->'flush();
 }
 
 function publishManualRestaurantEvent(string orderId, string eventType, json payload) returns error? {

@@ -53,7 +53,7 @@ try {
 
     foreach ($record in $records) {
         $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($record.payload))
-        docker exec $kafka bash -lc "echo $encoded | base64 -d | kafka-console-producer --bootstrap-server localhost:9092 --topic orders.created.dlq" | Out-Null
+        docker exec $kafka bash -lc "echo $encoded | base64 -d | kafka-console-producer --bootstrap-server kafka:9092 --topic orders.created.dlq" | Out-Null
     }
 
     $expectedKeys = $records.key
@@ -90,7 +90,7 @@ try {
     }
     Write-Output ($rows | ConvertTo-Json -Compress)
 
-    docker exec $kafka bash -lc "kafka-consumer-groups --bootstrap-server localhost:9092 --describe --group admin-service --topic orders.created.dlq"
+    docker exec $kafka bash -lc "kafka-consumer-groups --bootstrap-server kafka:9092 --describe --group admin-service --topic orders.created.dlq"
 
     docker compose restart admin-service | Out-Null
     Start-Sleep -Seconds 10

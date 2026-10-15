@@ -18,7 +18,7 @@ function Invoke-MongoJson([string] $expression) {
 }
 
 function Get-GroupOffset([string] $topic) {
-    $output = docker exec $KafkaContainer kafka-consumer-groups --bootstrap-server localhost:9092 `
+    $output = docker exec $KafkaContainer kafka-consumer-groups --bootstrap-server kafka:9092 `
         --describe --group order-service 2>$null
     $lines = $output | Where-Object { $_ -match "\s$topic\s" }
     if (-not $lines) {
@@ -40,7 +40,7 @@ function Get-GroupOffset([string] $topic) {
 
 function Get-EventLocation([string] $topic, [string] $eventId) {
     $raw = docker exec $KafkaContainer bash -lc `
-        "kafka-console-consumer --bootstrap-server localhost:9092 --topic $topic --from-beginning --property print.partition=true --property print.offset=true --timeout-ms 15000 2>/dev/null | grep '$eventId'"
+        "kafka-console-consumer --bootstrap-server kafka:9092 --topic $topic --from-beginning --property print.partition=true --property print.offset=true --timeout-ms 15000 2>/dev/null | grep '$eventId'"
     if (-not $raw) {
         throw "Could not locate event $eventId on $topic"
     }
@@ -54,7 +54,7 @@ function Get-EventLocation([string] $topic, [string] $eventId) {
 function Publish-Event([string] $topic, [string] $payload) {
     $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($payload))
     docker exec $KafkaContainer bash -lc `
-        "echo '$encoded' | base64 -d | kafka-console-producer --bootstrap-server localhost:9092 --topic $topic" |
+        "echo '$encoded' | base64 -d | kafka-console-producer --bootstrap-server kafka:9092 --topic $topic" |
         Out-Null
 }
 

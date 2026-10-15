@@ -97,12 +97,17 @@ function handlePaymentRecord(kafka:Consumer consumer, kafka:AnydataConsumerRecor
         if request is PaymentPayload {
             json summary = request.orderSummary;
             decimal amount = 0;
+            string? customerId = ();
             if summary is map<json> {
                 json? total = summary["total"];
                 if total is decimal {
                     amount = total;
                 } else if total is int {
                     amount = <decimal>total;
+                }
+                json? requestedCustomerId = summary["customerId"];
+                if requestedCustomerId is string {
+                    customerId = requestedCustomerId;
                 }
             }
             string method = "CARD";
@@ -119,7 +124,11 @@ function handlePaymentRecord(kafka:Consumer consumer, kafka:AnydataConsumerRecor
                 amount: amount, method: method, createdAt: now, updatedAt: now
             };
             payment.status = method == "SIM_DECLINE" ? "FAILED" : "COMPLETED";
-            payments[payment.paymentId] = payment;
+            error? saved = paymentRepository.save(payment, customerId);
+            if saved is error {
+                log:printError("payment persistence failed", 'error = saved);
+                return;
+            }
             string resultTopic = payment.status == "COMPLETED" ? "payments.completed" : "payments.failed";
             error? published = publishPaymentEvent(resultTopic, event, payment);
             if published is error {
@@ -128,17 +137,24 @@ function handlePaymentRecord(kafka:Consumer consumer, kafka:AnydataConsumerRecor
             }
         }
     } else if event.eventType == "orders.cancelled" || event.eventType == "orders.autocancelled" {
-        foreach string paymentId in payments.keys() {
-            Payment? payment = payments[paymentId];
-            if payment is Payment && payment.orderId == event.orderId &&
-                payment.status == "COMPLETED" {
-                payment.status = "REFUNDED";
-                payments[paymentId] = payment;
-                error? published = publishPaymentEvent("payments.refunded", event, payment);
-                if published is error {
-                    log:printError("payment refund publication failed", 'error = published);
-                    return;
-                }
+        Payment|error? paymentResult = paymentRepository.getByOrderId(event.orderId);
+        if paymentResult is error {
+            log:printError("payment lookup failed while processing cancellation",
+                'error = paymentResult);
+            return;
+        }
+        Payment? payment = paymentResult;
+        if payment is Payment && payment.status == "COMPLETED" {
+            payment.status = "REFUNDED";
+            error? saved = paymentRepository.save(payment);
+            if saved is error {
+                log:printError("payment refund persistence failed", 'error = saved);
+                return;
+            }
+            error? published = publishPaymentEvent("payments.refunded", event, payment);
+            if published is error {
+                log:printError("payment refund publication failed", 'error = published);
+                return;
             }
         }
     }

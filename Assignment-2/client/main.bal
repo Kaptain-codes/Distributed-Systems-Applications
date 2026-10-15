@@ -2,7 +2,7 @@ import ballerina/http;
 import ballerina/io;
 import ballerina/lang.runtime;
 
-configurable string baseUrl = "http://localhost:9090/api";
+configurable string baseUrl = "http://localhost:8080/api";
 configurable int pollMs = 2000;
 configurable boolean autoRegister = true;
 configurable boolean idempotencyEnabled = false;
@@ -22,7 +22,7 @@ type ClientState record {|
     string? customerId = ();
     string? addressId = ();
     json? address = ();
-    string baseUrl = "http://localhost:9090/api";
+    string baseUrl = "http://localhost:8080/api";
     int pollMs = 2000;
     string? activeOrderId = ();
     json[] drivers = [];

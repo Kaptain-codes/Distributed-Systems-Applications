@@ -190,6 +190,7 @@ function recoverDurableOutbox() returns error? {
         }
     }
 }
+// check for better validation of the document, validate as a whole 
 
 function isDurableOutboxOldEnough(string updatedAt, string cutoff) returns boolean {
     return updatedAt < cutoff;

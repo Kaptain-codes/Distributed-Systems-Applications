@@ -134,7 +134,9 @@ function findDeliveryByOrderId(string orderId) returns Delivery? {
 }
 
 function transition(string orderId, http:Request req, string target) returns json|http:Response {
-    Delivery? current = findDeliveryByOrderId(orderId);
+    Delivery|error? currentResult = dbFindDelivery(orderId);
+    if currentResult is error { return errorResponse(503, "DATABASE_ERROR", "delivery lookup failed"); }
+    Delivery? current = currentResult;
     if current is () { return errorResponse(404, "NOT_FOUND", "delivery was not found"); }
     boolean valid = target == "OUT_FOR_DELIVERY" ? current.status == "ASSIGNED" :
         current.status == "OUT_FOR_DELIVERY";

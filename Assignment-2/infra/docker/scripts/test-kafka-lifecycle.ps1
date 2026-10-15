@@ -13,7 +13,7 @@ $topics = @(
 
 function Get-OrderEvent([string] $Topic) {
     $raw = docker exec $KafkaContainer bash -lc `
-        "kafka-console-consumer --bootstrap-server localhost:9092 --topic $Topic --from-beginning --timeout-ms 15000 2>/dev/null | grep '$OrderId'"
+        "kafka-console-consumer --bootstrap-server kafka:9092 --topic $Topic --from-beginning --timeout-ms 15000 2>/dev/null | grep '$OrderId'"
     if (-not $raw) {
         return $null
     }

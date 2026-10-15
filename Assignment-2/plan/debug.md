@@ -10,6 +10,57 @@
 fixes, but a stable full-stack acceptance run has not certified every required
 scenario.
 
+## 2026-10-06 Browser debugging round
+
+### Scope
+
+This round was limited to the static frontend and browser behavior. No backend
+source files were changed and no backend debugging session was modified.
+
+### Environment
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Frontend static server on port 5500 | **PASS** | `GET /index.html` returned HTTP 200. |
+| Gateway on port 8080 | **BLOCKED** | Connection refused during this round. |
+| Existing browser page on port 5502 | **BLOCKED** | The page server returned `ERR_CONNECTION_REFUSED`. |
+| Frontend JavaScript syntax | **PASS** | `node --check Assignment-2\client\app.js`. |
+| Git diff formatting | **PASS** | `git diff --check`. |
+
+### Defects found and resolved
+
+1. **Customer deep links were stale after navigation.** Clicking
+   **Order food**, selecting a menu item, going back, or starting a new order
+   changed the rendered page without updating the URL hash. Added a shared
+   customer-page navigation helper that updates the hash with
+   `history.replaceState`.
+2. **Boolean DOM attributes had previously disabled available controls.**
+   The shared element helper now assigns boolean DOM properties rather than
+   serializing values such as `disabled="false"`.
+3. **Reconnects previously duplicated menu items.** Catalog reload now clears
+   the existing menu collection before appending fresh responses.
+
+### Browser evidence
+
+Using mocked API responses in the static browser page:
+
+| Journey | Result |
+| --- | --- |
+| Customer welcome renders restaurant and address | **PASS** |
+| Welcome → Menu | **PASS**, URL became `#mode=customer&page=menu` |
+| Menu item is available and clickable | **PASS** |
+| Menu → Checkout | **PASS**, URL became `#mode=customer&page=checkout` |
+| Checkout renders address, quantity, payment choices, and total | **PASS** |
+
+### Remaining blockers
+
+- Full order placement and lifecycle testing require the gateway and backend
+  services to be reachable.
+- The shared port-5502 browser page must be restarted before it can be
+  re-tested.
+- Full-stack certification remains **UNVERIFIED**; this frontend round does
+  not upgrade the overall certification status.
+
 | Area | Current result | Evidence or remaining boundary |
 | --- | --- | --- |
 | Order Service build/tests | **PASS** | Ballerina build/tests pass; cancellation and durable outbox behavior are covered below. |
@@ -42,12 +93,12 @@ The following debug-only documents were consolidated into this file:
 | `debug-session-4.md` | Compose profiles, Kafka networking, scale override, consumer liveness, and healthcheck hardening. |
 | `debug-session-5.md` | Documentation/configuration reconciliation and deployment caveats. |
 | `ConcurrencyDebug.md` | Why shared-state acceptance scenarios remain sequential. |
-| `client\webDebug.md` | Browser/UI matrix, CORS verification, and backend contract blockers. |
+| `webDebug.md` | Browser/UI matrix, CORS verification, and backend contract blockers. |
 | `confirmation.md` | Cross-check of the original audit against the current worktree. |
 | `docs\debug-index.md` | Chronological evidence index, now represented by this record and its dated headings. |
 
-The client specification in [`client.md`](client.md), UI specification in
-[`ui.md`](ui.md), architecture documents, requirements, and deployment
+The client specification in [`client.md`](../client.md), UI specification in
+[`ui.md`](../ui.md), architecture documents, requirements, and deployment
 documentation remain authoritative specifications—not duplicate debug logs.
 
 ## Reproduction and final-certification checklist
@@ -1183,6 +1234,39 @@ Optional: `--wait` makes the script return only when things are healthy, but tes
 
 In the zip, `create-topics.sh` and `docker-compose.yml` are LF (good) while `.gitignore`, all `.ps1` files and the README are CRLF. If a teammate has `core.autocrlf=true`, Git on Windows can check `create-topics.sh` out with CRLF. Bash then fails with `$'\r': command not found`, `kafka-init` exits non-zero, and every service (they all wait on `kafka-init` completing) never starts.
 
+## 2026-10-06 Controlled stale-order 404 verification
+
+### Scope
+
+The browser was run against the live gateway at `http://localhost:8080/api`
+with a deliberately nonexistent, server-independent order reference. No
+backend source was changed.
+
+### Evidence
+
+| Check | Result |
+| --- | --- |
+| `GET /api/order/orders/missing-order-debug-4` | **PASS (expected failure)** — gateway returned HTTP 404 |
+| Developer Track panel | **PASS** — rendered `Not found: http://localhost:8080/api/order/orders/missing-order-debug-4` |
+| Header/banner feedback | **PASS** — rendered the same URL as a visible `Not found` alert |
+| Payment and delivery probes | **EXPECTED DEPENDENCY RESULTS** — payment returned 404 and delivery returned 503 for the nonexistent order |
+
+### Fix
+
+The 404 branch in the shared polling path now schedules a state render after
+recording the missing order URL. This prevents the Track panel from remaining
+on the generic “Choose an order” empty state when the response arrives after
+the initial render. The URL remains visible in Developer mode for diagnosis;
+Customer mode continues to avoid exposing raw identifiers and status codes.
+
+### Current boundary
+
+The live gateway responded slowly (roughly 25–45 seconds for some polling
+cycles), so a complete real-order lifecycle could not be certified in this
+round. The stale-order 404 path is now directly verified. Full
+Customer → Checkout → Simulator → DELIVERED testing remains **UNVERIFIED**
+until the backend services are stable.
+
 Add `.gitattributes` at the repo root:
 
 ```gitattributes
@@ -1373,7 +1457,7 @@ After restarting delivery-service only, it became healthy and direct
 Admin logs showed DLQ records being received and persisted before these probes.
 
 The complete declared-vs-required comparison and runtime status table is in
-[docs/gateway-url-table.md](docs/gateway-url-table.md). The source mismatch
+[`docs/gateway-url-table.md`](../docs/gateway-url-table.md). The source mismatch
 findings are:
 
 - Delivery declares `/{deliveryId}` routes, while API-DEL-2 and API-DEL-3
@@ -1913,7 +1997,7 @@ durability. Full duplicate READY/replay business-flow verification remains
 
   Remaining documentation issues:
 
-  - `infra/k8s/deploymentScaffold.md` contains OCI-specific planning and a
+  - `deploymentScaffold.md` contains OCI-specific planning and a
     `localhost:9092` external Kafka reference that is not the Docker Compose
     host mapping; it needs an explicitly scoped deployment-documentation review.
   - Other historical findings in `debug.md` remain evidence for the final
@@ -2225,3 +2309,234 @@ gateway pairs, five cold-start comparisons, and complete AT-5 rerun remain
 **UNVERIFIED** because the shared Docker/Kafka environment has previously
 experienced resource-pressure exits. Those measurements should be rerun by
 the acceptance/infrastructure workstreams after the stack remains stable.
+
+Correction after rebuilding the final consumer configuration:
+
+- The connector documentation specifies `sessionTimeout` and
+  `heartBeatInterval` in seconds; the final source values are 10 and 3.
+- `maxPollInterval` remains 120000 in source and the service builds and starts
+  with `kafkaConsumerReady:true`.
+- A subsequent Kafka observation still reported `consumer poll timeout has
+  expired` and repeated group leaves/rejoins. Therefore the earlier
+  consumer-stall **PASS** is superseded: the durable outbox and cancellation
+  behavior remain PASS, but long-term Kafka consumer stability is
+  **HANDOFF REQUIRED — Session 4** for broker/connector runtime diagnosis.
+
+## 2026-10-06 Session 1 healthcheck latency follow-up
+
+Current infrastructure/runtime evidence:
+
+```text
+Kafka: healthy
+Zookeeper: healthy
+Order Service: running, healthy at inspection, zero restarts
+order-service consumer group: active member, reported lag=0
+external health probes: 6/6 successful with max-time=8s
+```
+
+The Docker healthcheck still recorded repeated failures at its four-second
+deadline, with `curl: (28) Operation timed out after 4001 milliseconds`.
+The endpoint itself only constructs a small JSON response; no Mongo query is
+performed by `/order/health`. During the same observation window, Docker
+reported Kafka at approximately 114% CPU and the Order Mongo container at
+approximately 85% CPU. This is consistent with runtime/scheduler contention
+delaying HTTP dispatch rather than a health-handler computation problem.
+
+An attempted `resource isolated function get health()` change was rejected by
+the Ballerina compiler because the handler reads mutable `kafkaConsumerReady`
+state. The change was reverted; no invalid or unbuilt code remains.
+
+Validation:
+
+```text
+bal build after reverting the isolated-handler experiment: PASS
+bal test: PASS (9 passing, 0 failing, 0 skipped)
+git diff --check: PASS
+```
+
+Classification: **HANDOFF REQUIRED — Session 4** for shared Kafka/Mongo
+resource contention and runtime scheduling diagnosis. No Compose resource
+limits or healthcheck deadlines were changed by Session 1. Full latency and
+acceptance measurements remain **UNVERIFIED** until the shared stack is not
+CPU-contended.
+
+## Session 6 - Final Integration
+
+### Scope and source limitations
+
+The requested standalone `debugPlan.md` and `debug-session-*.md` files were
+not present in the repository or session artifact directory. Their contents
+were represented by this consolidated record and `copilot-fix-plan.md`, which
+were read before verification. This is a traceability limitation, not evidence
+that any missing handoff item was completed.
+
+### Initial repository cross-check
+
+The required initial commands were run without destructive Git operations:
+
+```text
+git status --short
+ M Assignment-2/client/app.js
+ M Assignment-2/debug.md
+ M Assignment-2/infra/docker/docker-compose.yml
+ M Assignment-2/infra/docker/scripts/at-common.ps1
+ M Assignment-2/infra/docker/scripts/test-admin-dlq-audit.ps1
+ M Assignment-2/infra/docker/scripts/test-at-duplicate-ready.ps1
+ M Assignment-2/infra/docker/scripts/test-kafka-lifecycle.ps1
+ M Assignment-2/infra/docker/scripts/test-order-concurrent-duplicates.ps1
+ M Assignment-2/infra/docker/scripts/test-order-crash-recovery.ps1
+ M Assignment-2/infra/docker/scripts/test-order-dlq.ps1
+ M Assignment-2/infra/docker/scripts/test-order-durable-recovery.ps1
+ M Assignment-2/infra/docker/scripts/test-order-pending-recovery.ps1
+ M Assignment-2/services/orderService/kafka_consumer.bal
+
+git log --oneline -15
+[recorded before this section was appended; no commit was created]
+```
+
+The four files already modified before Session 6 were `client/app.js`,
+`debug.md`, `docker-compose.yml`, and `services/orderService/kafka_consumer.bal`.
+The nine Kafka script files are the only files edited by Session 6. No file
+was found to be edited by two sessions based on the available consolidated
+handoff; no changed file was absent from the final `git diff` name list; and
+no Session 6 edit crossed the documented service/client ownership boundary
+except for the explicitly authorized integration fix to shared Kafka scripts.
+
+### Consolidated open-item disposition
+
+| Item | Raised by | Owner | Status |
+| --- | --- | --- | --- |
+| Enable and verify delivery SQL durability | Session 2/4 | Delivery/Infrastructure | **VERIFIED in Compose configuration; live crash replay UNVERIFIED** |
+| Remove duplicate Order Service durable-state configuration | Session 4 | Infrastructure | **VERIFIED absent in inspected Compose file** |
+| Use `kafka:9092` for commands executed inside Kafka | Session 1/4 | Integration | **FIXED in nine scripts; PowerShell parsing passed** |
+| Complete AT-1 through AT-4 | Sessions 3/4 | Acceptance | **FAILED/UNVERIFIED; AT-1 timed out and AT-2–AT-4 did not complete** |
+| Complete AT-5 | Session 3 | Acceptance | **UNVERIFIED in this final run** |
+| 20-parallel duplicate READY regression | Session 2/3/4 | Delivery/Acceptance | **UNVERIFIED; run exceeded the bounded observation window** |
+| Two-replica delivery verification and redelivery comparison | Session 4 | Delivery/Acceptance | **UNVERIFIED** |
+| Crash-between-SQL-and-Kafka replay | Session 2 | Delivery | **UNVERIFIED** |
+| Stable latency sample and outbox proof | Session 1 | Order | **UNVERIFIED** |
+| Persistence/replay after down/up | Sessions 1/2/4 | Integration | **UNVERIFIED** |
+| Clean no-cache rebuild | Session 4/5 | Infrastructure | **BLOCKED by Ballerina dependency/toolchain resolution** |
+
+### Cross-session contract checks
+
+- Compose uses `kafka:9092` for container clients and `localhost:29092` for
+  host clients. The nine in-container script references were corrected to the
+  former; the remaining `localhost:9092` reference is in the separately
+  scoped Kubernetes scaffold.
+- Compose service names, published ports, delivery SQL environment, and
+  healthcheck paths were internally consistent in `docker compose config` and
+  `docker compose ps`.
+- Order consumer startup logged all expected delivery/payment topics and
+  `durableStateEnabled=true`.
+- The order-to-delivery event contract could not be certified end-to-end:
+  AT-1 created an order but no `orders.confirmed` event was observed within
+  60 seconds.
+- Duplicate READY handling and its two-consumer behavior could not be
+  certified because the regression did not complete.
+- Documentation claims depending on Sessions 1–5 remain bounded by the
+  explicit UNVERIFIED/BLOCKED labels above; no claim was upgraded from a
+  failed or incomplete run.
+
+### Commands and actual results
+
+```text
+docker info --format '{{.ServerVersion}}'
+29.7.2
+
+docker compose -f Assignment-2\infra\docker\docker-compose.yml config --quiet
+PASS
+
+git diff --check
+PASS
+
+PowerShell parse of 20 Docker scripts
+PASS
+
+docker compose --profile all -f Assignment-2\infra\docker\docker-compose.yml down --volumes --remove-orphans
+PASS; containers, volumes, and network removed
+
+docker compose --profile all -f Assignment-2\infra\docker\docker-compose.yml build --no-cache
+FAIL; Ballerina Central/package resolution errors including ballerina/io,
+ballerina/http, ballerina/crypto, and ballerinax/kafka
+
+bal build / bal test (delivery-service)
+PASS; 3 passing, 0 failing, 0 skipped
+
+bal build / bal test (order-service)
+PASS on retry; 9 passing, 0 failing, 0 skipped
+
+docker compose --profile all -f Assignment-2\infra\docker\docker-compose.yml up -d
+INITIAL FAIL; kafka-init exceeded its startup window
+
+docker compose --profile all -f Assignment-2\infra\docker\docker-compose.yml run --rm kafka-init
+PASS on manual retry
+
+docker compose -f Assignment-2\infra\docker\docker-compose.yml ps
+PASS; all listed application and database containers healthy
+
+.\scripts\test-at-1.ps1
+FAIL; create status=201, orderId=6cb0d2b5-e39d-4f1b-a6e9-61f8e11bd586;
+timed out waiting for topic orders.confirmed after 60s
+
+.\scripts\test-at-2.ps1, .\scripts\test-at-3.ps1,
+.\scripts\test-at-4.ps1, .\scripts\test-at-5.ps1
+UNVERIFIED; concurrent attempts produced no bounded result within four minutes
+and were stopped
+
+.\scripts\test-at-duplicate-ready.ps1
+UNVERIFIED; produced no bounded result within three minutes and was stopped
+
+Order-service log inspection
+PASS for startup evidence; consumer started with durableStateEnabled=true
+and the expected topic list
+```
+
+The required clean rebuild therefore did not pass, and the required complete
+acceptance sequence did not pass. The scale override, per-topic redelivery
+comparison, latency measurement, targeted outbox crash test, and down/up
+persistence replay were not promoted to pass claims because their prerequisites
+were not satisfied.
+
+### Per-session verdicts
+
+| Session | Verdict | Evidence |
+| --- | --- | --- |
+| Session 1 | **Needs rework** | Local Order Service tests pass, but final latency, outbox crash boundary, and full acceptance behavior remain unverified. |
+| Session 2 | **Needs rework** | Delivery SQL configuration and unit evidence exist, but live crash/replay and duplicate READY certification remain unverified. |
+| Session 3 | **Needs rework** | Harness parsing and bounded polling changes are present, but AT-1 failed and the remaining acceptance suite did not complete. |
+| Session 4 | **Needs rework** | Compose configuration and healthchecks are valid, but clean no-cache build and Kafka initialization remain operational blockers. |
+| Session 5 | **Needs rework** | Documentation/configuration reconciliation cannot be accepted while the documented end-to-end contracts remain unverified. |
+| Session 6 | **Rejected** | Integration found a clean-build blocker, AT-1 failure, and incomplete required regression evidence. |
+
+### Files changed by Session 6
+
+- `infra/docker/scripts/at-common.ps1`: changed in-container Kafka bootstrap
+  commands to `kafka:9092`.
+- `infra/docker/scripts/test-admin-dlq-audit.ps1`: corrected in-container
+  producer/consumer bootstrap addresses.
+- `infra/docker/scripts/test-at-duplicate-ready.ps1`: corrected duplicate
+  READY injection address.
+- `infra/docker/scripts/test-kafka-lifecycle.ps1`: corrected lifecycle
+  consumer address.
+- `infra/docker/scripts/test-order-concurrent-duplicates.ps1`: corrected
+  producer and consumer-group addresses.
+- `infra/docker/scripts/test-order-crash-recovery.ps1`: corrected all
+  in-container producer/consumer addresses.
+- `infra/docker/scripts/test-order-dlq.ps1`: corrected DLQ producer/consumer
+  addresses.
+- `infra/docker/scripts/test-order-durable-recovery.ps1`: corrected durable
+  recovery producer/consumer addresses.
+- `infra/docker/scripts/test-order-pending-recovery.ps1`: corrected pending
+  recovery producer/consumer addresses.
+- `debug.md`: appended this final integration evidence and verdict.
+
+### Overall verdict
+
+**FAIL** for the requested final certification. The repository is not eligible
+for `PASS`: the clean no-cache rebuild failed, AT-1 failed to observe
+`orders.confirmed`, AT-2 through AT-5 and duplicate READY did not complete in
+the final run, and scaled delivery, latency, crash replay, and persistence
+checks remain unverified. Remaining risks are Ballerina dependency resolution,
+Kafka initialization timing, the unresolved end-to-end order event flow, and
+unproven SQL/Kafka crash-boundary idempotency.

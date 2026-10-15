@@ -33,9 +33,14 @@ new demo customer.
 1. Click **Connect & refresh**.
 2. Select a restaurant, load its menu, and click an available item.
 3. Choose an address and `SIM_OK`, then place the order.
-4. Open **Simulator**, select the restaurant, and enable **Auto-drive**.
+4. Open **Simulator**, register a driver if none is saved, and enable
+   **Auto-drive**. The first saved driver is selected automatically.
 5. Watch the Track tab move through CREATED, CONFIRMED, PREPARING, READY,
    OUT_FOR_DELIVERY, and DELIVERED.
+
+If an AT-1 request fails, the UI displays the step, HTTP status, service error
+code/message, endpoint, and response body. Server errors warn that the request
+may have partially completed; verify the order state before retrying.
 
 For AT-2 choose `SIM_DECLINE`; the cancellation and payment-failure reason are
 shown on Track. For AT-5 use **Cancel order** while the order is CREATED or

@@ -33,6 +33,16 @@ cd Assignment-2/infra/docker
 
 Choose one of the five profiles shown in the menu.
 
+When running without an interactive prompt, pass the profile explicitly, for
+example:
+
+```powershell
+.\scripts\start-dev.ps1 -Profile order-customer
+```
+
+Valid values are `order-customer`, `notification-admin`,
+`restaurant-payment`, `delivery`, and `all`.
+
 On the first run, the script copies `.env.example` to `.env` and appends
 random passwords for seven databases: order, restaurant, payment, delivery,
 customer, notification, and admin. This initialization happens only when
@@ -138,7 +148,8 @@ calls is the most common wiring mistake when adding a new client.
 `kafka-init` runs once per `docker compose ... up` after Kafka is healthy. It
 reads `kafka/create-topics.sh` and creates topics with
 `--if-not-exists`, so rerunning it is idempotent and never deletes or
-recreates existing topics.
+recreates existing topics. The initializer allows up to five minutes for
+topic creation on a cold startup.
 
 Current topics:
 

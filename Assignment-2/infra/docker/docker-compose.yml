@@ -159,8 +159,8 @@ services:
   order-service:
     build: ../../services/orderService
     profiles: ["order-customer", "all"]
-    mem_limit: 512m
-    cpus: "1.0"
+    mem_limit: 1g
+    cpus: "2.0"
     environment:
       BAL_CONFIG_DATA: |
         kafkaRuntimeEnabled = true
@@ -189,6 +189,14 @@ services:
     # some earlier scaffolding/naming referring to it as "user service".
     build: ../../services/customerService
     profiles: ["order-customer", "all"]
+    environment:
+      BAL_CONFIG_DATA: |
+        durableStateEnabled = true
+        mysqlHost = "customer-db"
+        mysqlPort = 3306
+        mysqlDatabase = "${CUSTOMER_DB_NAME:-customer}"
+        mysqlUser = "${CUSTOMER_DB_USER:-customer_app}"
+        mysqlPassword = "${CUSTOMER_DB_APP_PASSWORD}"
     ports:
       - "127.0.0.1:${CUSTOMER_SERVICE_PORT:-8082}:9090"
     depends_on:
@@ -240,6 +248,11 @@ services:
       BAL_CONFIG_DATA: |
         kafkaRuntimeEnabled = true
         kafkaBootstrap = "kafka:9092"
+        durableStateEnabled = true
+        mongoUri = "mongodb://${NOTIFICATION_DB_USER:-notification_app}:${NOTIFICATION_DB_APP_PASSWORD}@notification-db:27017/${NOTIFICATION_DB_NAME:-notifications}?authSource=${NOTIFICATION_DB_NAME:-notifications}"
+        mongoDatabase = "${NOTIFICATION_DB_NAME:-notifications}"
+        redisHost = "notification-redis"
+        redisPort = 6379
     ports:
       - "127.0.0.1:${NOTIFICATION_SERVICE_PORT:-8083}:9090"
     depends_on:
@@ -249,6 +262,7 @@ services:
         condition: service_healthy
       notification-redis:
         condition: service_healthy
+        required: false
     healthcheck:
       test: ["CMD-SHELL", "curl -f --max-time 4 http://localhost:9090/notification/health || exit 1"]
       interval: 10s
@@ -279,6 +293,14 @@ services:
       BAL_CONFIG_DATA: |
         kafkaRuntimeEnabled = true
         kafkaBootstrap = "kafka:9092"
+        durableStateEnabled = true
+        mysqlHost = "payment-db"
+        mysqlPort = 3306
+        mysqlDatabase = "${PAYMENT_DB_NAME:-payment}"
+        mysqlUser = "${PAYMENT_DB_USER:-payment_app}"
+        mysqlPassword = "${PAYMENT_DB_APP_PASSWORD}"
+        redisHost = "payment-redis"
+        redisPort = 6379
     ports:
       - "127.0.0.1:${PAYMENT_SERVICE_PORT:-8084}:9090"
     depends_on:
@@ -288,6 +310,7 @@ services:
         condition: service_healthy
       payment-redis:
         condition: service_healthy
+        required: false
     healthcheck:
       test: ["CMD-SHELL", "curl -f --max-time 4 http://localhost:9090/payment/health || exit 1"]
       interval: 10s
@@ -305,6 +328,12 @@ services:
       BAL_CONFIG_DATA: |
         kafkaRuntimeEnabled = true
         kafkaBootstrap = "kafka:9092"
+        durableStateEnabled = true
+        mysqlHost = "restaurant-db"
+        mysqlPort = 3306
+        mysqlDatabase = "${RESTAURANT_DB_NAME:-restaurant}"
+        mysqlUser = "${RESTAURANT_DB_USER:-restaurant_app}"
+        mysqlPassword = "${RESTAURANT_DB_APP_PASSWORD}"
     ports:
       - "127.0.0.1:${RESTAURANT_SERVICE_PORT:-8087}:9090"
     depends_on:

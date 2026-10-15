@@ -69,13 +69,13 @@ function Wait-Topic([string]$id, [string]$topic, [int]$seconds = 60) {
 }
 
 function Get-BaseKafkaTopics() {
-    return @(docker exec $KafkaContainer bash -lc "kafka-topics --bootstrap-server localhost:9092 --list 2>/dev/null" |
+    return @(docker exec $KafkaContainer bash -lc "kafka-topics --bootstrap-server kafka:9092 --list 2>/dev/null" |
         Where-Object { $_ -and $_ -notmatch '^__' -and $_ -notmatch '\.dlq$' })
 }
 
 function Capture-KafkaStartOffsets() {
     foreach ($topic in @(Get-BaseKafkaTopics)) {
-        $lines = @(docker exec $KafkaContainer bash -lc "kafka-get-offsets --bootstrap-server localhost:9092 --topic $topic 2>/dev/null")
+        $lines = @(docker exec $KafkaContainer bash -lc "kafka-get-offsets --bootstrap-server kafka:9092 --topic $topic 2>/dev/null")
         foreach ($line in $lines) {
             if ($line -match '^([^:]+):(\d+):(\d+)$') {
                 $script:KafkaStartOffsets["$($Matches[1]):$($Matches[2])"] = [long]$Matches[3]
@@ -127,7 +127,7 @@ function Get-KafkaRecords([string]$topic, [string]$id) {
         Sort-Object -Unique)
     foreach ($partition in $partitions) {
         $startOffset = $script:KafkaStartOffsets["$topic`:$partition"]
-        $partitionLines = @(docker exec $KafkaContainer bash -lc "timeout 4s kafka-console-consumer --bootstrap-server localhost:9092 --topic $topic --partition $partition --offset $startOffset --timeout-ms 1000 --property print.timestamp=true --property print.key=true 2>/dev/null || true")
+        $partitionLines = @(docker exec $KafkaContainer bash -lc "timeout 4s kafka-console-consumer --bootstrap-server kafka:9092 --topic $topic --partition $partition --offset $startOffset --timeout-ms 1000 --property print.timestamp=true --property print.key=true 2>/dev/null || true")
         $lines += $partitionLines
     }
     $records = @()

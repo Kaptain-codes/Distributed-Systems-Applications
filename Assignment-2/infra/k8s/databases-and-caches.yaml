@@ -25,9 +25,13 @@ metadata:
   name: order-db-data
 spec:
   accessModes: [ReadWriteOnce]
+  # TODO(decision): OCI minimum block volume is 50 GB, so the requested size
+  # is rounded up. Ten PVCs x 50 Gi = 500 Gi provisioned, which exceeds the
+  # 200 GB Always Free combined boot + block storage allowance. A paid tenancy
+  # or overage acceptance is required.
   resources:
     requests:
-      storage: 10Gi
+      storage: 50Gi
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -35,9 +39,13 @@ metadata:
   name: customer-db-data
 spec:
   accessModes: [ReadWriteOnce]
+  # TODO(decision): OCI minimum block volume is 50 GB, so the requested size
+  # is rounded up. Ten PVCs x 50 Gi = 500 Gi provisioned, which exceeds the
+  # 200 GB Always Free combined boot + block storage allowance. A paid tenancy
+  # or overage acceptance is required.
   resources:
     requests:
-      storage: 10Gi
+      storage: 50Gi
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -45,9 +53,13 @@ metadata:
   name: restaurant-db-data
 spec:
   accessModes: [ReadWriteOnce]
+  # TODO(decision): OCI minimum block volume is 50 GB, so the requested size
+  # is rounded up. Ten PVCs x 50 Gi = 500 Gi provisioned, which exceeds the
+  # 200 GB Always Free combined boot + block storage allowance. A paid tenancy
+  # or overage acceptance is required.
   resources:
     requests:
-      storage: 10Gi
+      storage: 50Gi
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -55,9 +67,13 @@ metadata:
   name: payment-db-data
 spec:
   accessModes: [ReadWriteOnce]
+  # TODO(decision): OCI minimum block volume is 50 GB, so the requested size
+  # is rounded up. Ten PVCs x 50 Gi = 500 Gi provisioned, which exceeds the
+  # 200 GB Always Free combined boot + block storage allowance. A paid tenancy
+  # or overage acceptance is required.
   resources:
     requests:
-      storage: 10Gi
+      storage: 50Gi
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -65,9 +81,13 @@ metadata:
   name: delivery-db-data
 spec:
   accessModes: [ReadWriteOnce]
+  # TODO(decision): OCI minimum block volume is 50 GB, so the requested size
+  # is rounded up. Ten PVCs x 50 Gi = 500 Gi provisioned, which exceeds the
+  # 200 GB Always Free combined boot + block storage allowance. A paid tenancy
+  # or overage acceptance is required.
   resources:
     requests:
-      storage: 20Gi
+      storage: 50Gi
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -75,9 +95,13 @@ metadata:
   name: notification-db-data
 spec:
   accessModes: [ReadWriteOnce]
+  # TODO(decision): OCI minimum block volume is 50 GB, so the requested size
+  # is rounded up. Ten PVCs x 50 Gi = 500 Gi provisioned, which exceeds the
+  # 200 GB Always Free combined boot + block storage allowance. A paid tenancy
+  # or overage acceptance is required.
   resources:
     requests:
-      storage: 10Gi
+      storage: 50Gi
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -85,9 +109,13 @@ metadata:
   name: admin-db-data
 spec:
   accessModes: [ReadWriteOnce]
+  # TODO(decision): OCI minimum block volume is 50 GB, so the requested size
+  # is rounded up. Ten PVCs x 50 Gi = 500 Gi provisioned, which exceeds the
+  # 200 GB Always Free combined boot + block storage allowance. A paid tenancy
+  # or overage acceptance is required.
   resources:
     requests:
-      storage: 10Gi
+      storage: 50Gi
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -95,9 +123,13 @@ metadata:
   name: gateway-redis-data
 spec:
   accessModes: [ReadWriteOnce]
+  # TODO(decision): OCI minimum block volume is 50 GB, so the requested size
+  # is rounded up. Ten PVCs x 50 Gi = 500 Gi provisioned, which exceeds the
+  # 200 GB Always Free combined boot + block storage allowance. A paid tenancy
+  # or overage acceptance is required.
   resources:
     requests:
-      storage: 2Gi
+      storage: 50Gi
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -105,9 +137,13 @@ metadata:
   name: notification-redis-data
 spec:
   accessModes: [ReadWriteOnce]
+  # TODO(decision): OCI minimum block volume is 50 GB, so the requested size
+  # is rounded up. Ten PVCs x 50 Gi = 500 Gi provisioned, which exceeds the
+  # 200 GB Always Free combined boot + block storage allowance. A paid tenancy
+  # or overage acceptance is required.
   resources:
     requests:
-      storage: 2Gi
+      storage: 50Gi
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -115,9 +151,13 @@ metadata:
   name: payment-redis-data
 spec:
   accessModes: [ReadWriteOnce]
+  # TODO(decision): OCI minimum block volume is 50 GB, so the requested size
+  # is rounded up. Ten PVCs x 50 Gi = 500 Gi provisioned, which exceeds the
+  # 200 GB Always Free combined boot + block storage allowance. A paid tenancy
+  # or overage acceptance is required.
   resources:
     requests:
-      storage: 2Gi
+      storage: 50Gi
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -405,6 +445,12 @@ spec:
     metadata:
       labels: {app: delivery-db}
     spec:
+      # TODO(decision): delivery-db requires an amd64 node. OKE must include a
+      # node pool with an amd64 shape (e.g. VM.Standard.E3.Flex, 1 OCPU / 8 GB).
+      # azure-sql-edge is NOT an acceptable fallback; Microsoft discontinued
+      # arm64 support (last arm64 tag is 1.0.7, EOL).
+      nodeSelector:
+        kubernetes.io/arch: amd64
       securityContext:
         fsGroup: 10001
       containers:
@@ -432,6 +478,94 @@ metadata:
 spec:
   selector: {app: delivery-db}
   ports: [{name: mssql, port: 1433, targetPort: mssql}]
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: delivery-db-init-schema
+data:
+  01-schema.sql: |
+    IF DB_ID('delivery') IS NULL CREATE DATABASE delivery;
+    GO
+    USE delivery;
+    GO
+    IF OBJECT_ID('dbo.drivers', 'U') IS NULL
+    CREATE TABLE drivers (id UNIQUEIDENTIFIER PRIMARY KEY, name NVARCHAR(120) NOT NULL, phone NVARCHAR(40) NOT NULL,
+      status VARCHAR(16) NOT NULL, last_assigned_at DATETIME2 NULL);
+    IF OBJECT_ID('dbo.deliveries', 'U') IS NULL
+    CREATE TABLE deliveries (id UNIQUEIDENTIFIER PRIMARY KEY, order_id UNIQUEIDENTIFIER NOT NULL UNIQUE,
+      restaurant_id UNIQUEIDENTIFIER NOT NULL, driver_id UNIQUEIDENTIFIER NULL, pickup_address NVARCHAR(255) NOT NULL,
+      dropoff_address NVARCHAR(255) NOT NULL, status VARCHAR(16) NOT NULL, attempts INT NOT NULL DEFAULT 0,
+      assigned_at DATETIME2 NULL, completed_at DATETIME2 NULL, failure_reason NVARCHAR(255) NULL,
+      assigned_event_id NVARCHAR(120) NULL, assigned_published BIT NOT NULL DEFAULT 0);
+    IF COL_LENGTH('dbo.deliveries', 'assigned_event_id') IS NULL
+      ALTER TABLE deliveries ADD assigned_event_id NVARCHAR(120) NULL;
+    IF COL_LENGTH('dbo.deliveries', 'assigned_published') IS NULL
+      ALTER TABLE deliveries ADD assigned_published BIT NOT NULL CONSTRAINT df_deliveries_assigned_published DEFAULT 0;
+    IF OBJECT_ID('dbo.processed_events', 'U') IS NULL
+    CREATE TABLE processed_events (event_id UNIQUEIDENTIFIER PRIMARY KEY, processed_at DATETIME2 NOT NULL);
+    IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'ix_drivers_status_last_assigned_at'
+      AND object_id = OBJECT_ID('dbo.drivers'))
+    CREATE INDEX ix_drivers_status_last_assigned_at ON drivers(status, last_assigned_at);
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: delivery-db-init
+spec:
+  template:
+    spec:
+      # TODO(decision): delivery-db requires an amd64 node. OKE must include a
+      # node pool with an amd64 shape (e.g. VM.Standard.E3.Flex, 1 OCPU / 8 GB).
+      # azure-sql-edge is NOT an acceptable fallback; Microsoft discontinued
+      # arm64 support (last arm64 tag is 1.0.7, EOL).
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      restartPolicy: Never
+      containers:
+        - name: init
+          image: mcr.microsoft.com/mssql-tools
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 10001
+          env:
+            - {name: SA_PASSWORD, valueFrom: {secretKeyRef: {name: database-credentials, key: DELIVERY_DB_PASSWORD}}}
+          command: [/bin/bash, -ec]
+          args:
+            - |
+              SQLCMD=/opt/mssql-tools/bin/sqlcmd
+
+              # 1. Wait for SQL Server to accept connections.
+              until $SQLCMD -S delivery-db -U sa -P "$SA_PASSWORD" -b -Q "SELECT 1" >/dev/null 2>&1; do
+                echo "waiting for delivery-db"; sleep 3
+              done
+
+              # 2. Create the database only if absent.
+              $SQLCMD -S delivery-db -U sa -P "$SA_PASSWORD" -b \
+                -Q "IF DB_ID('delivery') IS NULL CREATE DATABASE delivery"
+
+              # 3. Apply 01-schema.sql only if the sentinel table is absent.
+              #    Update 'drivers' below to whichever table 01-schema.sql
+              #    creates first if that name ever changes.
+              EXISTS=$($SQLCMD -S delivery-db -U sa -P "$SA_PASSWORD" -b -h -1 -W \
+                -Q "SET NOCOUNT ON; SELECT COUNT(*) FROM sys.tables WHERE name='drivers'" \
+                | tr -d '[:space:]')
+              if [ "$EXISTS" != "1" ]; then
+                echo "running 01-schema.sql"
+                $SQLCMD -S delivery-db -U sa -P "$SA_PASSWORD" -b -d delivery -i /schema/01-schema.sql
+              else
+                echo "schema already present, skipping"
+              fi
+          volumeMounts:
+            - name: schema
+              mountPath: /schema
+              readOnly: true
+      volumes:
+        - name: schema
+          configMap:
+            name: delivery-db-init-schema
 ---
 apiVersion: apps/v1
 kind: Deployment

@@ -72,7 +72,7 @@
     </section>
   </main>
   <div id="orderSheet" class="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="sheetTitle"><button class="sheet-close" id="closeSheet" aria-label="Close">×</button><h2 id="sheetTitle"></h2><p id="sheetPrice"></p><div class="qty-stepper"><button id="qtyDown">−</button><strong id="qtyValue">1</strong><button id="qtyUp">+</button></div><label>Delivery address<select id="addressSelect"></select></label><fieldset><legend>Payment</legend><label><input type="radio" name="payment" value="SIM_OK" checked> Simulate success</label><label><input type="radio" name="payment" value="SIM_DECLINE"> Simulate decline (AT-2)</label></fieldset><p id="sheetTotal"></p><p id="sheetMessage" class="status-msg"></p><button id="placeOrderBtn">Place order</button></div>
-  <div id="errorSheet" class="sheet error-sheet" hidden role="dialog" aria-modal="true"><h2>API contract response needs attention</h2><p id="errorSummary"></p><pre id="errorRaw" class="json-view"></pre><button id="copyError">Copy response</button><button id="retryError">Retry</button><button id="cancelError">Cancel</button></div>
+  <div id="errorSheet" class="sheet error-sheet" hidden role="dialog" aria-modal="true"><h2 id="errorTitle">API response needs attention</h2><p id="errorSummary"></p><pre id="errorRaw" class="json-view"></pre><button id="copyError">Copy response</button><button id="retryError">Retry</button><button id="cancelError">Cancel</button></div>
   <div id="toastStack" class="toast-stack" aria-live="polite"></div>
   <script src="app.js"></script>
 </body>

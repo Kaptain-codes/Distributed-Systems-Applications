@@ -91,23 +91,27 @@ function handleNotificationRecord(kafka:Consumer consumer, kafka:AnydataConsumer
         commitNotificationRecord(consumer, kafkaRecord);
         return;
     }
-    notifyRecipients(event);
+    error? notified = notifyRecipients(event);
+    if notified is error {
+        log:printError("notification persistence failed", 'error = notified);
+        return;
+    }
     notificationProcessedEvents[event.eventId] = true;
     commitNotificationRecord(consumer, kafkaRecord);
 }
 
 // Creates the notifications for one event:
 // the customer on every event, and the restaurant on `orders.created` only.
-function notifyRecipients(NotificationEvent event) {
+function notifyRecipients(NotificationEvent event) returns error? {
     string customerId = orderSummaryField(event.data, "customerId");
     string restaurantId = orderSummaryField(event.data, "restaurantId");
 
     if customerId.length() > 0 {
-        _ = addNotification(RECIPIENT_CUSTOMER, customerId, event.orderId, event.eventId,
+        _ = check addNotification(RECIPIENT_CUSTOMER, customerId, event.orderId, event.eventId,
                 "Order status changed to " + event.eventType);
     }
     if restaurantId.length() > 0 && event.eventType == ORDER_CREATED {
-        _ = addNotification(RECIPIENT_RESTAURANT, restaurantId, event.orderId, event.eventId,
+        _ = check addNotification(RECIPIENT_RESTAURANT, restaurantId, event.orderId, event.eventId,
                 "New order received");
     }
 }

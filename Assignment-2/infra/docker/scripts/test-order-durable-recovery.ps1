@@ -22,7 +22,7 @@ function Get-DbCounts {
 
 function Get-Event([string] $Topic, [string] $Match) {
     $raw = docker exec $KafkaContainer bash -lc `
-        "kafka-console-consumer --bootstrap-server localhost:9092 --topic $Topic --from-beginning --timeout-ms 15000 2>/dev/null | grep '$Match'"
+        "kafka-console-consumer --bootstrap-server kafka:9092 --topic $Topic --from-beginning --timeout-ms 15000 2>/dev/null | grep '$Match'"
     if (-not $raw) {
         throw "No event found on $Topic matching $Match"
     }
@@ -39,7 +39,7 @@ function Get-ProcessedEventCount([string] $EventId) {
 function Publish-ExactEvent([string] $Topic, [string] $Payload) {
     $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($Payload))
     docker exec $KafkaContainer bash -lc `
-        "echo '$encoded' | base64 -d | kafka-console-producer --bootstrap-server localhost:9092 --topic $Topic" |
+        "echo '$encoded' | base64 -d | kafka-console-producer --bootstrap-server kafka:9092 --topic $Topic" |
         Out-Null
 }
 

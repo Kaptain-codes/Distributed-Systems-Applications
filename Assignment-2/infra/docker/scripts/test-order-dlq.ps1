@@ -6,12 +6,12 @@ $ErrorActionPreference = "Stop"
 $event = '{"eventType":"restaurant.accepted"}'
 
 docker exec $KafkaContainer bash -lc `
-    "printf '%s\n' '$event' | kafka-console-producer --bootstrap-server localhost:9092 --topic restaurant.accepted" | Out-Null
+    "printf '%s\n' '$event' | kafka-console-producer --bootstrap-server kafka:9092 --topic restaurant.accepted" | Out-Null
 
 Start-Sleep -Seconds 3
 
 $dlq = docker exec $KafkaContainer bash -lc `
-    "kafka-console-consumer --bootstrap-server localhost:9092 --topic restaurant.accepted.dlq --from-beginning --timeout-ms 10000 2>/dev/null"
+    "kafka-console-consumer --bootstrap-server kafka:9092 --topic restaurant.accepted.dlq --from-beginning --timeout-ms 10000 2>/dev/null"
 if (-not $dlq) {
     throw "No poison message was published to restaurant.accepted.dlq"
 }

@@ -80,7 +80,7 @@ create_topics() {
 }
 
 echo "Waiting for Kafka to accept requests..."
-timeout 120s bash -c "
+timeout 300s bash -c "
   $(declare -f create_topics)
   $(declare -p TOPICS)
   BOOTSTRAP_SERVER='$BOOTSTRAP_SERVER'

@@ -39,8 +39,8 @@ flowchart LR
     Gateway --> Payment
     Gateway --> Restaurant
     Gateway --> Delivery
-    B -. declared Compose dependencies; no client wiring in current source .-> D
-    B -. topics provisioned; no producers/consumers in current source .-> Kafka
+    B -->|service-owned persistence| D
+    B -. published and consumed events in configured handlers .-> Kafka
     Kafka --> ZK
 ```
 
@@ -61,9 +61,9 @@ All components attach to the Docker bridge network `backbone`, as declared in
 | `restaurant-service` | Restaurant resources | 9090 | 8087 | [restaurantService/service.bal](services/restaurantService/service.bal), [Compose](infra/docker/docker-compose.yml) |
 
 The seven business services expose typed HTTP resources with validation and
-state guards. Kafka/database adapters are isolated behind the service
-boundaries; the local demo profile uses deterministic seed data and the
-contracts package under `shared/contracts`.
+state guards. Database repositories and Kafka handlers are implemented behind
+the service boundaries; the local demo profile uses deterministic seed data
+and the contracts package under `shared/contracts`.
 
 ## Gateway routes and request flow
 
@@ -96,11 +96,11 @@ container-side port, as configured in [docker-compose.yml](infra/docker/docker-c
 
 ## Data and external infrastructure
 
-### Database ownership
+### Database ownership and persistence
 
 ```mermaid
 flowchart TB
-    subgraph Services[Business service ownership declared by Compose]
+    subgraph Services[Service-owned persistence configured by Compose]
         O[order-service] --> ODB[(order-db\nMongoDB 7.0)]
         R[restaurant-service] --> RDB[(restaurant-db\nMySQL 8)]
         P[payment-service] --> PDB[(payment-db\nMySQL 8)]
@@ -113,16 +113,34 @@ flowchart TB
     end
 ```
 
-Compose declares these dependencies and volumes. The service packages expose
-typed resource boundaries and the database schema/seed files establish the
-ownership contract; the current local service implementation keeps its
-business state in memory until the connector-backed persistence adapter is
-enabled.
+Each service persists its state in its own database. Customer, Payment,
+Restaurant, and Notification select their in-memory or database-backed
+repository with `durableStateEnabled`; Compose enables durable state for these
+services. Delivery uses its SQL Server repository, while Order and Admin retain
+their existing MongoDB persistence. Payment and Notification construct a
+Redis client during service initialization and continue if client
+initialization fails. They do not currently read from or write to Redis; the
+dashed Redis links show the Compose provisioned dependencies, not application
+data operations.
+
+Admin stores consumed dead-letter records in the `admin.dlq_log` collection
+when `durableStateEnabled` is true. It creates a unique index for Kafka topic,
+partition, and offset, plus an `eventId` lookup index during startup. The
+consumer persists a record before committing its Kafka offset, and
+`GET /admin/dlq` reads the stored records. With durable state disabled, that
+endpoint reads the in-memory DLQ map instead.
+
+Customer address persistence follows the existing schema: `label`, `line1`,
+`city`, `region`, and `is_default` are stored. The API returns `Namibia` as the
+country, defaults a missing label to `Home`, and does not persist postal codes
+because the schema has no country or postal-code columns.
 
 Kafka topics are created by the one-shot `kafka-init` container from
 [create-topics.sh](infra/docker/kafka/create-topics.sh). It verifies the exact
 46-topic inventory (23 base topics and one lowercase `.dlq` per topic). Kafka
-runs with ZooKeeper coordination and plaintext listeners.
+runs with ZooKeeper coordination and plaintext listeners. Service Kafka
+producers and consumers persist service state through their repositories at
+the existing publication and consumption points.
 
 The event contract is defined in
 [shared/contracts/types.bal](shared/contracts/types.bal): every event has an
@@ -353,8 +371,9 @@ flush from being republished prematurely while retaining at-least-once recovery.
   Ballerina `BAL_CONFIG_DATA` block. Remove the duplicate before recreating
   the affected service.
 - `unused configuration value` means the service source does not declare that
-  configurable key. Remove the key from that service's configuration; do not
-  copy SQL settings into Order Service, which currently uses Mongo persistence.
+  configurable key. Remove the key from that service's configuration; use each
+  service's database settings as declared in its source and Compose service
+  block.
 - If timestamps or polling windows behave differently between host and WSL,
   check clock synchronization first. Host/WSL clock drift can make
   timestamp-aware acceptance assertions appear early or late.
@@ -375,4 +394,7 @@ flush from being republished prematurely while retaining at-least-once recovery.
 - Check `docker compose ps` and each health endpoint.
 - Treat health `UP` as process availability only.
 - Confirm the `curl` and MSSQL tooling assumptions against the built images.
-- Inspect source before assuming Kafka, Redis or database behavior; those integrations are not currently implemented.
+- Inspect the service source when checking persistence or Kafka behavior.
+  Payment and Notification currently initialize Redis clients without using
+  Redis commands; their Redis connections are not part of the order persistence
+  flow.
