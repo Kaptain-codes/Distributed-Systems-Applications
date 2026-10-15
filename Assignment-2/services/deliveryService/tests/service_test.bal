@@ -26,6 +26,14 @@ function testServiceWithEmptyName() returns error? {
     test:assertEquals(healthPayload, {status: "UP", 'service: "delivery"});
 }
 
+@test:Config {}
+function testDeliveryLookupReturnsCommonNotFoundError() returns error? {
+    http:Response response = check testClient->get("/delivery/deliveries/missing-delivery");
+    test:assertEquals(response.statusCode, 404);
+    json payload = check response.getJsonPayload();
+    test:assertEquals(payload, {'error: "NOT_FOUND", message: "delivery was not found"});
+}
+
 // After Suite Function
 @test:AfterSuite
 function afterSuiteFunc() {

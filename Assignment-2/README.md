@@ -39,27 +39,31 @@ flowchart LR
     Gateway --> Payment
     Gateway --> Restaurant
     Gateway --> Delivery
-    B -. declared Compose dependencies; no client wiring in current source .-> D
-    B -. topics provisioned; no producers/consumers in current source .-> Kafka
+    B -->|service-owned persistence| D
+    B -. published and consumed events in configured handlers .-> Kafka
     Kafka --> ZK
 ```
 
-All components attach to the Docker bridge network `backbone`, [docker-compose.yml](infra/docker/docker-compose.yml#L4-L6).
+All components attach to the Docker bridge network `backbone`, as declared in
+[docker-compose.yml](infra/docker/docker-compose.yml).
 
 ## Component catalog and responsibilities
 
 | Component | Current responsibility | Internal port | Host port | Evidence |
 | --- | --- | ---: | ---: | --- |
-| `gateway` | REST entry point and reverse proxy | 8080 | 8080 | [gateway/service.bal](gateway/service.bal#L5-L27) |
-| `order-service` | `/order/health` only | 9090 | 8081 | [orderService/service.bal](services/orderService/service.bal#L7-L13), [Compose](infra/docker/docker-compose.yml#L127-L143) |
-| `customer-service` | `/customer/health` only | 9090 | 8082 | [customerService/service.bal](services/customerService/service.bal#L5-L10), [Compose](infra/docker/docker-compose.yml#L145-L163) |
-| `notification-service` | `/notification/health` only | 9090 | 8083 | [notificationService/service.bal](services/notificationService/service.bal#L5-L12), [Compose](infra/docker/docker-compose.yml#L184-L202) |
-| `payment-service` | `/payment/health` only | 9090 | 8084 | [paymentService/service.bal](services/paymentService/service.bal#L5-L11), [Compose](infra/docker/docker-compose.yml#L220-L238) |
-| `admin-service` | `/admin/health` only | 9090 | 8085 | [adminService/service.bal](services/adminService/service.bal#L5-L10), [Compose](infra/docker/docker-compose.yml#L165-L182) |
-| `delivery-service` | `/delivery/health` only | 9090 | 8086 | [deliveryService/service.bal](services/deliveryService/service.bal#L5-L11), [Compose](infra/docker/docker-compose.yml#L273-L290) |
-| `restaurant-service` | `/restaurant/health` only | 9090 | 8087 | [restaurantService/service.bal](services/restaurantService/service.bal#L5-L10), [Compose](infra/docker/docker-compose.yml#L240-L256) |
+| `gateway` | REST entry point and reverse proxy | 8080 | 8080 | [gateway/service.bal](gateway/service.bal) |
+| `order-service` | `/order/health` and order resources | 9090 | 8081 | [orderService/service.bal](services/orderService/service.bal), [Compose](infra/docker/docker-compose.yml) |
+| `customer-service` | Customer resources | 9090 | 8082 | [customerService/service.bal](services/customerService/service.bal), [Compose](infra/docker/docker-compose.yml) |
+| `notification-service` | Notification resources | 9090 | 8083 | [notificationService/service.bal](services/notificationService/service.bal), [Compose](infra/docker/docker-compose.yml) |
+| `payment-service` | Payment resources | 9090 | 8084 | [paymentService/service.bal](services/paymentService/service.bal), [Compose](infra/docker/docker-compose.yml) |
+| `admin-service` | Admin and DLQ resources | 9090 | 8085 | [adminService/service.bal](services/adminService/service.bal), [Compose](infra/docker/docker-compose.yml) |
+| `delivery-service` | Delivery resources | 9090 | 8086 | [deliveryService/service.bal](services/deliveryService/service.bal), [Compose](infra/docker/docker-compose.yml) |
+| `restaurant-service` | Restaurant resources | 9090 | 8087 | [restaurantService/service.bal](services/restaurantService/service.bal), [Compose](infra/docker/docker-compose.yml) |
 
-The seven business services are currently scaffolds. No CRUD, order, payment, notification, restaurant or delivery workflows are implemented in their `service.bal` files.
+The seven business services expose typed HTTP resources with validation and
+state guards. Database repositories and Kafka handlers are implemented behind
+the service boundaries; the local demo profile uses deterministic seed data
+and the contracts package under `shared/contracts`.
 
 ## Gateway routes and request flow
 
@@ -74,7 +78,7 @@ sequenceDiagram
     G-->>C: Proxied response
 ```
 
-Routes are declared in [gateway/service.bal](gateway/service.bal#L27-L61):
+Routes are declared in [gateway/service.bal](gateway/service.bal):
 
 | Gateway route | Client target | Internal downstream URL |
 | --- | --- | --- |
@@ -87,15 +91,16 @@ Routes are declared in [gateway/service.bal](gateway/service.bal#L27-L61):
 | `GET /api/restaurant/{id}` | Restaurant | `http://restaurant-service:9090/restaurant/{id}` |
 | `GET /api/health` | Gateway | Static gateway health response |
 
-The service names are used as Docker DNS hostnames and `9090` is the container-side port, [gateway/service.bal](gateway/service.bal#L7-L17).
+The service names are used as Docker DNS hostnames and `9090` is the
+container-side port, as configured in [docker-compose.yml](infra/docker/docker-compose.yml).
 
 ## Data and external infrastructure
 
-### Database ownership
+### Database ownership and persistence
 
 ```mermaid
 flowchart TB
-    subgraph Services[Business service ownership declared by Compose]
+    subgraph Services[Service-owned persistence configured by Compose]
         O[order-service] --> ODB[(order-db\nMongoDB 7.0)]
         R[restaurant-service] --> RDB[(restaurant-db\nMySQL 8)]
         P[payment-service] --> PDB[(payment-db\nMySQL 8)]
@@ -108,9 +113,55 @@ flowchart TB
     end
 ```
 
-Compose declares these dependencies and volumes, but the current service source does not create database, Redis or messaging clients. Evidence: [docker-compose.yml](infra/docker/docker-compose.yml#L132-L195), [docker-compose.yml](infra/docker/docker-compose.yml#L225-L290), and the health-only service implementations.
+Each service persists its state in its own database. Customer, Payment,
+Restaurant, and Notification select their in-memory or database-backed
+repository with `durableStateEnabled`; Compose enables durable state for these
+services. Delivery uses its SQL Server repository, while Order and Admin retain
+their existing MongoDB persistence. Payment and Notification construct a
+Redis client during service initialization and continue if client
+initialization fails. They do not currently read from or write to Redis; the
+dashed Redis links show the Compose provisioned dependencies, not application
+data operations.
 
-Kafka topics are created by the one-shot `kafka-init` container from [create-topics.sh](infra/docker/kafka/create-topics.sh). Kafka runs with ZooKeeper coordination and plaintext listeners, [docker-compose.yml](infra/docker/docker-compose.yml#L36-L63).
+Admin stores consumed dead-letter records in the `admin.dlq_log` collection
+when `durableStateEnabled` is true. It creates a unique index for Kafka topic,
+partition, and offset, plus an `eventId` lookup index during startup. The
+consumer persists a record before committing its Kafka offset, and
+`GET /admin/dlq` reads the stored records. With durable state disabled, that
+endpoint reads the in-memory DLQ map instead.
+
+Customer address persistence follows the existing schema: `label`, `line1`,
+`city`, `region`, and `is_default` are stored. The API returns `Namibia` as the
+country, defaults a missing label to `Home`, and does not persist postal codes
+because the schema has no country or postal-code columns.
+
+Kafka topics are created by the one-shot `kafka-init` container from
+[create-topics.sh](infra/docker/kafka/create-topics.sh). It verifies the exact
+46-topic inventory (23 base topics and one lowercase `.dlq` per topic). Kafka
+runs with ZooKeeper coordination and plaintext listeners. Service Kafka
+producers and consumers persist service state through their repositories at
+the existing publication and consumption points.
+
+The event contract is defined in
+[shared/contracts/types.bal](shared/contracts/types.bal): every event has an
+ID, type, UTC timestamp, order key, correlation ID and mandatory order
+summary. The development broker uses three partitions and replication factor
+one; production should use at least three brokers and replication factor three.
+
+### Verification
+
+```powershell
+Set-Location Assignment-2\shared\contracts; bal test
+Set-Location ..\services\orderService; bal test
+Set-Location ..\..\gateway; bal build
+docker compose --env-file infra\docker\.env.example -f infra\docker\docker-compose.yml config --quiet
+```
+
+Start a clean local stack with
+`infra\docker\scripts\start-dev.ps1`, select the `all` profile, and use
+`infra\docker\scripts\reset-dev-data.ps1` only when destructive volume reset
+is intended. Internal validation routes containing `/internal/` are rejected
+by the gateway and are available only on the owning service.
 
 ## Docker and container architecture
 
@@ -118,7 +169,7 @@ Kafka topics are created by the one-shot `kafka-init` container from [create-top
 flowchart LR
     subgraph Host[Developer host]
         Compose[docker compose --profile ... up -d]
-        Ports[127.0.0.1:8080-8087, 29092, 2181,\n1434-1437, 27017-27019]
+        Ports[127.0.0.1:8080-8087, 29092, 2181,\n3307-3309, 1437, 27017-27019]
     end
     subgraph Net[backbone bridge network]
         G[ gateway ]
@@ -129,9 +180,12 @@ flowchart LR
     Ports --> Net
 ```
 
-All eight application images use the same two-stage Dockerfile pattern: Ballerina build image, `bal build --offline=false`, then Eclipse Temurin 21 JRE with the generated JAR. Evidence: [gateway/Dockerfile](gateway/Dockerfile#L1-L10) and the equivalent service Dockerfiles.
+All eight application images use the same two-stage Dockerfile pattern:
+Ballerina build image, `bal build --offline=false`, then Eclipse Temurin 21
+JRE with the generated JAR. See [gateway/Dockerfile](gateway/Dockerfile) and
+the equivalent service Dockerfiles.
 
-Named volumes are declared in [docker-compose.yml](infra/docker/docker-compose.yml#L426-L435):
+Named volumes are declared in [docker-compose.yml](infra/docker/docker-compose.yml):
 
 - `order-db-data`
 - `restaurant-db-data`
@@ -155,13 +209,36 @@ Every profile starts the shared gateway, Kafka, ZooKeeper and topic initializer.
 | `delivery` | delivery `8086` | delivery MSSQL `1437` |
 | `all` | all seven services | all databases and both Redis instances |
 
-Host clients use gateway `localhost:8080`, Kafka `localhost:29092`, and ZooKeeper `localhost:2181`. Containers use `kafka:9092`; application services use port `9090` internally. Published ports bind to loopback by default.
+Host clients use gateway `localhost:8080`, Kafka `localhost:29092`, and
+ZooKeeper `localhost:2181`. Containers use `kafka:9092`; application services
+use port `9090` internally. Published ports bind to loopback by default.
+
+### Connection table
+
+Use the host values for tools running on the developer machine. Services inside
+Compose use the database service name and container port instead.
+
+| Service | Host | Port | Username | Password variable | Authentication database |
+| --- | --- | ---: | --- | --- | --- |
+| order-db (MongoDB) | `localhost` | 27017 | `order_app` | `ORDER_DB_APP_PASSWORD` | `orders` |
+| customer-db (MySQL) | `localhost` | 3307 | `customer_app` | `CUSTOMER_DB_APP_PASSWORD` | `customer` |
+| restaurant-db (MySQL) | `localhost` | 3308 | `restaurant_app` | `RESTAURANT_DB_APP_PASSWORD` | `restaurant` |
+| payment-db (MySQL) | `localhost` | 3309 | `payment_app` | `PAYMENT_DB_APP_PASSWORD` | `payment` |
+| notification-db (MongoDB) | `localhost` | 27018 | `notification_app` | `NOTIFICATION_DB_APP_PASSWORD` | `notifications` |
+| admin-db (MongoDB) | `localhost` | 27019 | `admin_app` | `ADMIN_DB_APP_PASSWORD` | `admin` |
+| delivery-db (SQL Server) | `localhost` | 1437 | `sa` | `DELIVERY_DB_PASSWORD` | `master` |
 
 ## Configuration and secrets
 
-[.env.example](infra/docker/.env.example) defines `COMPOSE_PROJECT_NAME`, database host ports, `MONGO_ROOT_USER` and `COMPOSE_PARALLEL_LIMIT`. [start-dev.ps1](infra/docker/scripts/start-dev.ps1#L15-L35) generates local database passwords into the ignored `.env`; no secret values are documented here.
+[.env.example](infra/docker/.env.example) defines `COMPOSE_PROJECT_NAME`,
+database host ports, `MONGO_ROOT_USER` and `COMPOSE_PARALLEL_LIMIT`.
+[start-dev.ps1](infra/docker/scripts/start-dev.ps1) generates local database
+passwords into the ignored `.env`; no secret values are documented here.
 
-The gateway has configurable Ballerina values for its port and downstream URLs, [gateway/service.bal](gateway/service.bal#L5-L17). Compose does not provide an explicit environment mapping for these values.
+The gateway's configurable Ballerina values, including downstream URLs and
+timeout, are supplied through `BAL_CONFIG_DATA` in
+[docker-compose.yml](infra/docker/docker-compose.yml). Local values and
+password placeholders are listed in [.env.example](infra/docker/.env.example).
 
 ## Development setup
 
@@ -186,7 +263,10 @@ To remove selected profile volumes so databases reinitialize with the current
 .\scripts\reset-dev-data.ps1
 ```
 
-Do not expose or commit `.env`. Database initialization credentials are retained in persistent volumes; regenerating `.env` without resetting affected volumes can cause authentication failures.
+Do not expose, submit, or commit `.env`; submit/share
+[.env.example](infra/docker/.env.example) instead. Database initialization
+credentials are retained in persistent volumes; regenerating `.env` without
+resetting affected volumes can cause authentication failures.
 
 ## Health checks
 
@@ -201,7 +281,7 @@ Compose checks:
 - MSSQL with `sqlcmd`
 - Redis with `redis-cli ping`
 
-Evidence: [docker-compose.yml](infra/docker/docker-compose.yml#L21-L33), [docker-compose.yml](infra/docker/docker-compose.yml#L52-L63), and [docker-compose.yml](infra/docker/docker-compose.yml#L118-L424).
+Evidence: [docker-compose.yml](infra/docker/docker-compose.yml).
 
 ## Technologies and observability
 
@@ -212,9 +292,91 @@ Evidence: [docker-compose.yml](infra/docker/docker-compose.yml#L21-L33), [docker
 - Confluent Kafka/ZooKeeper.
 - MySQL 8, MongoDB 7, SQL Server 2022 and Redis 7.
 - Java 21 JRE application runtime.
-- Ballerina built-in observability included in each package, for example [gateway/Ballerina.toml](gateway/Ballerina.toml#L7-L9).
+- Ballerina built-in observability included in each package, for example
+  [gateway/Ballerina.toml](gateway/Ballerina.toml).
 
 No metrics exporter, tracing backend, dashboard, alerting configuration or centralized logging configuration is present.
+
+## Acceptance and delivery verification
+
+Run the acceptance scripts from `Assignment-2/infra/docker` with the `all`
+profile running. Use the committed `.env.example` defaults; in particular,
+leave `GATEWAY_DOWNSTREAM_TIMEOUT` unset in the shell and do not raise it
+locally, because an override can hide downstream slowness.
+
+Run these scripts **sequentially, never in parallel**, in this order:
+
+1. `.\scripts\test-at-1.ps1` — order creation and restaurant acceptance.
+2. `.\scripts\test-at-2.ps1` — restaurant preparation/ready progression.
+3. `.\scripts\test-at-3.ps1` — delivery assignment/progression.
+4. `.\scripts\test-at-4.ps1` — delivery completion and order confirmation.
+5. `.\scripts\test-at-5.ps1` — cancellation and asynchronous
+   `orders.cancelled` publication.
+6. `.\scripts\test-at-duplicate-ready.ps1` — duplicate `restaurant.ready`
+   delivery handling and idempotency.
+
+The scripts poll asynchronous transitions, so allow seconds to several
+minutes per script. A recorded AT-5 run took approximately 6 minutes
+23 seconds; other durations are workload- and startup-dependent and are not
+certified here.
+
+To exercise two delivery instances, start the delivery profile with a scale
+override, then run the duplicate-ready script:
+
+```powershell
+cd Assignment-2/infra/docker
+docker compose -f docker-compose.yml -f docker-compose.scale.yml `
+  --profile delivery up -d --build --scale delivery-service=2
+.\scripts\test-at-duplicate-ready.ps1
+```
+
+Session 4 observed two healthy delivery replicas with two distinct
+`delivery-service` Kafka members and zero lag. Repeat the membership and lag
+check before and after the run:
+
+```powershell
+.\scripts\check-consumers.ps1 -Groups delivery-service -MaxLag 0
+```
+
+The helper reports `members` and total `lag`; zero members, unknown lag, or
+lag above `MaxLag` is a failure. It queries `kafka:9092` from the Kafka
+container. For a manual host-side query, use `localhost:29092`.
+
+Delivery durability is enabled by Compose with `durableStateEnabled = true`.
+The initializer mounts
+[`infra/docker/initdb/delivery-db/01-schema.sql`](infra/docker/initdb/delivery-db/01-schema.sql),
+which idempotently creates `drivers`, `deliveries`, and `processed_events` and
+adds the guarded `assigned_event_id` and `assigned_published` delivery columns
+when upgrading an existing database, plus the driver assignment index. Live
+SQL-driver packaging and two-instance
+duplicate-READY handling are covered by Session 2 evidence; crash-between-SQL
+and Kafka replay remains **UNVERIFIED**.
+
+Order Service uses the configurable
+`durableOutboxMinAgeSeconds` setting, defaulting to `20` seconds. The recovery
+job only republishes pending outbox rows older than that threshold, while the
+regular recovery job runs every 10 seconds. This prevents a recent asynchronous
+flush from being republished prematurely while retaining at-least-once recovery.
+
+## Troubleshooting asynchronous startup
+
+- If `kafka-init` remains `running`, inspect `docker compose logs kafka-init`
+  and wait for Kafka health. Verify topics with
+  `.\infra\docker\scripts\check-topics.ps1`; do not start consumers against a
+  broker that has not become healthy.
+- If a consumer group has no members, inspect its container logs and run
+  `.\infra\docker\scripts\check-consumers.ps1`. For Order Service, duplicate
+  keys or unsupported values in `BAL_CONFIG_DATA` can stop startup.
+- `invalid TOML` with duplicate keys means a key occurs more than once in the
+  Ballerina `BAL_CONFIG_DATA` block. Remove the duplicate before recreating
+  the affected service.
+- `unused configuration value` means the service source does not declare that
+  configurable key. Remove the key from that service's configuration; use each
+  service's database settings as declared in its source and Compose service
+  block.
+- If timestamps or polling windows behave differently between host and WSL,
+  check clock synchronization first. Host/WSL clock drift can make
+  timestamp-aware acceptance assertions appear early or late.
 
 ## Known inconsistencies
 
@@ -222,7 +384,8 @@ No metrics exporter, tracing backend, dashboard, alerting configuration or centr
    endpoints; the build pipeline should be checked after dependency fixes.
 2. No `restart` policies are configured; this is intentional for local
    development.
-3. No CI/CD or production deployment infrastructure exists. `infra/k8s` is empty.
+3. No CI/CD or production deployment infrastructure exists. The files under
+   [infra/k8s](infra/k8s) are deployment scaffolds, not a verified deployment.
 
 ## Architecture verification checklist
 
@@ -231,4 +394,7 @@ No metrics exporter, tracing backend, dashboard, alerting configuration or centr
 - Check `docker compose ps` and each health endpoint.
 - Treat health `UP` as process availability only.
 - Confirm the `curl` and MSSQL tooling assumptions against the built images.
-- Inspect source before assuming Kafka, Redis or database behavior; those integrations are not currently implemented.
+- Inspect the service source when checking persistence or Kafka behavior.
+  Payment and Notification currently initialize Redis clients without using
+  Redis commands; their Redis connections are not part of the order persistence
+  flow.

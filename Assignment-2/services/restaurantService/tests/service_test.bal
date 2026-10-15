@@ -26,6 +26,17 @@ function testServiceWithEmptyName() returns error? {
     test:assertEquals(healthPayload, {status: "UP", 'service: "restaurant"});
 }
 
+@test:Config {}
+function testStockValidationRejectsUnavailableItems() {
+    MenuItem item = {id: "item-test", restaurantId: "res-test", name: "Meal",
+        unitPrice: 10.0, available: false, stockQty: 2};
+    menuItems[item.id] = item;
+    KitchenOrder kitchenOrder = {id: "order-test", restaurantId: "res-test",
+        items: [{menuItemId: item.id, quantity: 1}], status: "PENDING_DECISION"};
+    test:assertFalse(inStock(kitchenOrder));
+    _ = menuItems.remove(item.id);
+}
+
 // After Suite Function
 @test:AfterSuite
 function afterSuiteFunc() {

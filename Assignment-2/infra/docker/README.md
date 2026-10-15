@@ -33,6 +33,16 @@ cd Assignment-2/infra/docker
 
 Choose one of the five profiles shown in the menu.
 
+When running without an interactive prompt, pass the profile explicitly, for
+example:
+
+```powershell
+.\scripts\start-dev.ps1 -Profile order-customer
+```
+
+Valid values are `order-customer`, `notification-admin`,
+`restaurant-payment`, `delivery`, and `all`.
+
 On the first run, the script copies `.env.example` to `.env` and appends
 random passwords for seven databases: order, restaurant, payment, delivery,
 customer, notification, and admin. This initialization happens only when
@@ -93,18 +103,20 @@ creates new random passwords, but existing database volumes still contain the
 old credentials from their first initialization. MySQL, MongoDB, and MSSQL apply
 their initialization credentials only once, on an empty data directory. The
 result is an authentication failure that can look like a broken container
-(SCRAM mismatch for MongoDB or SQL login failure for MSSQL).
+(SCRAM mismatch for MongoDB, MySQL login failure, or SQL login failure for MSSQL).
 
 To recover, delete only the affected named volume(s), then start the profile
-again so the database initializes with the regenerated password. The Compose
-project name is `distributed_food_delivery_system`; prefer the reset script
-above instead of hard-coding volume names:
+again so the database initializes with the regenerated password. Prefer the reset script above instead of hard-coding the Compose project name
+or volume names:
 
 ```powershell
 docker volume ls
 docker volume ls --filter name=customer-db-data
 docker volume rm <name-from-docker-volume-ls>
 ```
+
+Never include `infra/docker/.env` in a submission, ZIP, issue, or support
+bundle. It contains local credentials generated for the persistent volumes.
 
 The volume names are declared at the bottom of `docker-compose.yml`
 (`order-db-data`, `restaurant-db-data`, `payment-db-data`, `delivery-db-data`,
@@ -136,25 +148,98 @@ calls is the most common wiring mistake when adding a new client.
 `kafka-init` runs once per `docker compose ... up` after Kafka is healthy. It
 reads `kafka/create-topics.sh` and creates topics with
 `--if-not-exists`, so rerunning it is idempotent and never deletes or
-recreates existing topics.
+recreates existing topics. The initializer allows up to five minutes for
+topic creation on a cold startup.
 
 Current topics:
 
 - `orders.created`, `orders.confirmed`, `orders.preparing`, `orders.ready`
 - `orders.out_for_delivery`, `orders.delivered`, `orders.cancelled`,
   `orders.autocancelled`
-- `payments.completed`, `payments.failed`, `payments.cancelled`,
-  `payments.refunded`
+- `payments.completed`, `payment.requested`, `payments.failed`,
+  `payments.cancelled`, `payments.refunded`
 - `restaurant.accepted`, `restaurant.rejected`, `restaurant.preparing`,
   `restaurant.ready`
-- `delivery.assigned`, `delivery.not_assigned`, `delivery.completed`,
-  `delivery.cancelled`, `delivery.failed`
+- `delivery.assigned`, `delivery.picked_up`, `delivery.not_assigned`,
+  `delivery.completed`, `delivery.cancelled`, `delivery.failed`
 - Every base event topic has a lowercase `.dlq` companion. Keep the topic
-  contract in `kafka/create-topics.sh`; overlapping order/restaurant and
-  order/delivery events still require team ownership review.
+  contract in `kafka/create-topics.sh`; the initializer verifies exactly 46
+  topics before completing. `kafka/check-topics.sh` and
+  `scripts/check-topics.ps1` provide host-side verification.
+
+## Connection table
+
+These host values match the committed `.env.example`. Inside Compose, use the
+service name and the container port instead of `localhost`.
+
+| Service | Host | Port | Username | Password variable | Authentication database |
+| --- | --- | ---: | --- | --- | --- |
+| order-db (MongoDB) | `localhost` | 27017 | `order_app` | `ORDER_DB_APP_PASSWORD` | `orders` |
+| customer-db (MySQL) | `localhost` | 3307 | `customer_app` | `CUSTOMER_DB_APP_PASSWORD` | `customer` |
+| restaurant-db (MySQL) | `localhost` | 3308 | `restaurant_app` | `RESTAURANT_DB_APP_PASSWORD` | `restaurant` |
+| payment-db (MySQL) | `localhost` | 3309 | `payment_app` | `PAYMENT_DB_APP_PASSWORD` | `payment` |
+| notification-db (MongoDB) | `localhost` | 27018 | `notification_app` | `NOTIFICATION_DB_APP_PASSWORD` | `notifications` |
+| admin-db (MongoDB) | `localhost` | 27019 | `admin_app` | `ADMIN_DB_APP_PASSWORD` | `admin` |
+| delivery-db (SQL Server) | `localhost` | 1437 | `sa` | `DELIVERY_DB_PASSWORD` | `master` |
 
 Add new topics to the `TOPICS` array in
 [`kafka/create-topics.sh`](kafka/create-topics.sh).
+
+## Acceptance and delivery verification
+
+Run from this directory with the `all` profile. Keep
+`GATEWAY_DOWNSTREAM_TIMEOUT` at the template default (`10`) and unset any
+local override while certifying; a larger local value can hide downstream
+slowness.
+
+Run `test-at-1.ps1`, `test-at-2.ps1`, `test-at-3.ps1`, `test-at-4.ps1`,
+`test-at-5.ps1`, then `test-at-duplicate-ready.ps1`, in that order and
+**sequentially, never in parallel**:
+
+```powershell
+.\scripts\test-at-1.ps1
+.\scripts\test-at-2.ps1
+.\scripts\test-at-3.ps1
+.\scripts\test-at-4.ps1
+.\scripts\test-at-5.ps1
+.\scripts\test-at-duplicate-ready.ps1
+```
+
+AT-1 through AT-4 prove the order/restaurant/delivery progression through
+confirmation; AT-5 proves cancellation and asynchronous cancellation
+publication; the duplicate-ready script probes duplicate delivery-event
+handling. Each script polls asynchronous work and may take seconds to several
+minutes. The recorded AT-5 evidence took approximately 6 minutes 23 seconds;
+no fixed duration is guaranteed for the other scripts.
+
+For a two-instance delivery run:
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.scale.yml `
+  --profile delivery up -d --build --scale delivery-service=2
+.\scripts\test-at-duplicate-ready.ps1
+.\scripts\check-consumers.ps1 -Groups delivery-service -MaxLag 0
+```
+
+`check-consumers.ps1` reports active membership and aggregate lag. It fails
+when membership is zero, lag is unknown, or lag exceeds `MaxLag`. It runs the
+Kafka query inside the broker container with `kafka:9092`; host-side tools use
+`localhost:29092`. Session 4 observed two healthy delivery replicas with two
+distinct `delivery-service` members and zero lag. Crash-between-SQL and Kafka
+replay remains **UNVERIFIED**.
+
+Compose enables delivery durable state with `durableStateEnabled = true` and
+mounts `initdb/delivery-db/01-schema.sql`. That idempotent SQL initializer
+creates the `drivers`, `deliveries`, and `processed_events` tables and the
+guarded `assigned_event_id` and `assigned_published` delivery columns for
+existing databases, plus the driver status/last-assigned index. The delivery SQL driver packaging and
+duplicate-READY handling are covered by Session 2 evidence; crash-between-SQL
+and Kafka replay remains **UNVERIFIED**.
+
+Order Service uses the configurable `durableOutboxMinAgeSeconds` setting,
+defaulting to `20` seconds. The recovery job only republishes pending outbox
+rows older than that threshold, while the regular recovery job runs every
+10 seconds.
 
 ## Troubleshooting
 
@@ -163,7 +248,9 @@ Add new topics to the `TOPICS` array in
 This is usually a stale volume/password mismatch. Existing MySQL, MongoDB, and
 MSSQL volumes retain the credentials from their first initialization. Follow the
 volume recovery steps above; do not keep deleting and regenerating `.env`
-without deleting the affected volume.
+without deleting the affected volume. The MySQL healthcheck uses an
+authenticated query, but a client login can still fail if the application
+password in `.env` no longer matches the password stored in the volume.
 
 ### Image pulls time out during TLS or fail while copying
 
@@ -194,3 +281,22 @@ If the script came from a downloaded ZIP, remove its downloaded-file mark:
 ```powershell
 Unblock-File .\scripts\start-dev.ps1
 ```
+
+### Kafka or consumer startup
+
+- If `kafka-init` remains at `running`, inspect `docker compose logs kafka-init`,
+  wait for the Kafka healthcheck, and verify topics with
+  `.\kafka\check-topics.ps1`. A running one-shot container is not proof that
+  topic creation completed.
+- If a consumer group has no members, inspect service logs and run
+  `.\scripts\check-consumers.ps1`. A duplicate TOML key or unsupported
+  configurable value can terminate the consumer before membership is formed.
+- `invalid TOML file` with duplicate keys means the same key occurs more than
+  once in a service's `BAL_CONFIG_DATA` block. Remove the repeated key and
+  recreate that service.
+- `unused configuration value` means the target service does not declare that
+  configurable key. Remove it rather than copying settings between services;
+  Order Service currently uses Mongo persistence.
+- If host and WSL clocks differ, synchronize both before relying on
+  timestamp-aware acceptance assertions or polling deadlines. Clock drift can
+  make an asynchronous event appear early or late.

@@ -4,5 +4,8 @@ name = "gateway"
 version = "0.1.0"
 distribution = "2201.13.4"
 
+[dependencies]
+"ballerinax/redis" = "3.4.1"
+
 [build-options]
 observabilityIncluded = true

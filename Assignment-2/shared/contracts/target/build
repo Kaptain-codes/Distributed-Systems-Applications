@@ -1,0 +1,54 @@
+{
+  "last_build_time": 1792060627025,
+  "last_update_time": 1792060627025,
+  "last_bal_toml_update_time": 1790922189846,
+  "distribution_version": "2201.13.4",
+  "last_modified_time": {
+    "contracts": 1790926009185
+  },
+  "last_build_options": {
+    "compilationOptions": {
+      "observabilityIncluded": true,
+      "dumpBir": false,
+      "cloud": "",
+      "dumpGraph": false,
+      "dumpRawGraphs": false
+    }
+  },
+  "src_meta_info": [
+    {
+      "file": "C:\\Users\\wykva\\IdeaProjects\\Distributed-Systems-Applications\\Assignment-2\\shared\\contracts\\Ballerina.toml",
+      "hash": "e11ff27e9831fd50af70ee5d8948cdf38c8fc2c47cdd3cf837e10b2502ffb8b7",
+      "size": 148,
+      "lastModifiedTime": 1790922189846
+    },
+    {
+      "file": "C:\\Users\\wykva\\IdeaProjects\\Distributed-Systems-Applications\\Assignment-2\\shared\\contracts\\types.bal",
+      "hash": "4a6e189236f51914932117976726e36832a41e20c6ecfaf98eec253e94c8f7f0",
+      "size": 2508,
+      "lastModifiedTime": 1790926009185
+    }
+  ],
+  "target_exec_meta_info": {
+    "file": "C:\\Users\\wykva\\IdeaProjects\\Distributed-Systems-Applications\\Assignment-2\\shared\\contracts\\target\\backup\\bin\\contracts.jar",
+    "hash": "738e81ffcd2502cb2a58cd491163662ab99548edc09c36ba677bb3a4741b89e9",
+    "size": 10687810,
+    "lastModifiedTime": 1792060633080
+  },
+  "settings_meta_info": {
+    "file": "C:\\Users\\wykva\\.ballerina\\Settings.toml",
+    "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "size": 0,
+    "lastModifiedTime": 1782327368914
+  },
+  "ballerina_toml_meta_info": {
+    "file": "C:\\Users\\wykva\\IdeaProjects\\Distributed-Systems-Applications\\Assignment-2\\shared\\contracts\\Ballerina.toml",
+    "hash": "e11ff27e9831fd50af70ee5d8948cdf38c8fc2c47cdd3cf837e10b2502ffb8b7",
+    "size": 148,
+    "lastModifiedTime": 1790922189846
+  },
+  "imports": [
+    "ballerina/time",
+    "ballerina/test"
+  ]
+}

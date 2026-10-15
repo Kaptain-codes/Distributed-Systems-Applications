@@ -1,0 +1,27 @@
+name: Assignment 2 verification
+
+on:
+  push:
+    paths:
+      - "Assignment-2/**"
+  pull_request:
+    paths:
+      - "Assignment-2/**"
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Assignment-2
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify topic inventory
+        shell: bash
+        run: |
+          test "$(grep -v '^[[:space:]]*$' infra/docker/kafka/expected-topics.txt | wc -l)" -eq 46
+          test "$(grep -v '\.dlq$' infra/docker/kafka/expected-topics.txt | wc -l)" -eq 23
+          grep -qx 'payment.requested' infra/docker/kafka/expected-topics.txt
+          grep -qx 'delivery.picked_up' infra/docker/kafka/expected-topics.txt
+      - name: Validate Compose
+        run: docker compose --env-file infra/docker/.env.example -f infra/docker/docker-compose.yml config --quiet

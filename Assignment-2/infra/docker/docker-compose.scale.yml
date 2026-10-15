@@ -1,0 +1,7 @@
+# Development-only override for exercising multiple delivery consumers.
+# An empty host port lets Docker allocate a distinct ephemeral port per replica.
+services:
+  delivery-service:
+    ports: !override
+      - "127.0.0.1::9090"
+      - "127.0.0.1::9090"

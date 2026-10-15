@@ -16,6 +16,9 @@ services:
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
+      KAFKA_HEAP_OPTS: "-Xms256m -Xmx256m"
+    mem_limit: 512m
+    cpus: "1.0"
     ports:
       - "127.0.0.1:${ZOOKEEPER_PORT:-2181}:2181"
     healthcheck:
@@ -50,6 +53,9 @@ services:
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_HEAP_OPTS: "-Xms512m -Xmx512m"
+    mem_limit: 1g
+    cpus: "2.0"
     ports:
       - "127.0.0.1:${KAFKA_HOST_PORT:-29092}:29092"
     healthcheck:
@@ -58,7 +64,7 @@ services:
       # were competing for CPU/memory at once (confirmed via
       # `docker inspect ... .State.Health` showing "exceeded timeout (5s)"
       # on every failed attempt even though a manual run succeeded instantly).
-      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list > /dev/null 2>&1"]
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server kafka:9092 --list > /dev/null 2>&1"]
       interval: 10s
       timeout: 15s
       retries: 15
@@ -86,7 +92,24 @@ services:
   gateway:
     build: ../../gateway
     profiles: ["order-customer", "restaurant-payment", "delivery", "notification-admin", "all"]
+    mem_limit: 512m
+    cpus: "1.0"
+    environment:
+      BAL_CONFIG_DATA: |
+        redisHost = "gateway-redis"
+        redisPort = 6379
+        redisPassword = "${GATEWAY_REDIS_PASSWORD:-}"
+        orderService = "http://order-service:9090"
+        customerService = "http://customer-service:9090"
+        restaurantService = "http://restaurant-service:9090"
+        paymentService = "http://payment-service:9090"
+        deliveryService = "http://delivery-service:9090"
+        notificationService = "http://notification-service:9090"
+        adminService = "http://admin-service:9090"
+        downstreamTimeout = ${GATEWAY_DOWNSTREAM_TIMEOUT:-60}
     depends_on:
+      gateway-redis:
+        condition: service_started
       order-service:
         condition: service_started
         required: false
@@ -111,26 +134,50 @@ services:
     ports:
       - "127.0.0.1:${GATEWAY_PORT:-8080}:8080"
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/api/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f --max-time 4 http://localhost:8080/api/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 12
       start_period: 20s
     networks: [backbone]
 
+  gateway-redis:
+    image: redis:7.4-alpine
+    profiles: ["order-customer", "restaurant-payment", "delivery", "notification-admin", "all"]
+    ports:
+      - "127.0.0.1:${GATEWAY_REDIS_PORT:-6379}:6379"
+    volumes:
+      - gateway-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks: [backbone]
+
   # Wilgano
   order-service:
     build: ../../services/orderService
     profiles: ["order-customer", "all"]
+    mem_limit: 1g
+    cpus: "2.0"
+    environment:
+      BAL_CONFIG_DATA: |
+        kafkaRuntimeEnabled = true
+        kafkaBootstrap = "kafka:9092"
+        durableStateEnabled = true
+        testFailurePoint = "${ORDER_TEST_FAILURE_POINT:-}"
+        testFailureEventId = "${ORDER_TEST_FAILURE_EVENT_ID:-}"
+        mongoUri = "mongodb://order_app:${ORDER_DB_APP_PASSWORD}@order-db:27017/orders?authSource=orders"
     ports:
       - "127.0.0.1:${ORDER_SERVICE_PORT:-8081}:9090"
     depends_on:
       kafka-init:
-        condition: service_completed_successfully
+        condition: service_started
       order-db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:9090/order/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f --max-time 4 http://localhost:9090/order/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -142,15 +189,23 @@ services:
     # some earlier scaffolding/naming referring to it as "user service".
     build: ../../services/customerService
     profiles: ["order-customer", "all"]
+    environment:
+      BAL_CONFIG_DATA: |
+        durableStateEnabled = true
+        mysqlHost = "customer-db"
+        mysqlPort = 3306
+        mysqlDatabase = "${CUSTOMER_DB_NAME:-customer}"
+        mysqlUser = "${CUSTOMER_DB_USER:-customer_app}"
+        mysqlPassword = "${CUSTOMER_DB_APP_PASSWORD}"
     ports:
       - "127.0.0.1:${CUSTOMER_SERVICE_PORT:-8082}:9090"
     depends_on:
       kafka-init:
-        condition: service_completed_successfully
+        condition: service_started
       customer-db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:9090/customer/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f --max-time 4 http://localhost:9090/customer/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -161,15 +216,23 @@ services:
   admin-service:
     build: ../../services/adminService
     profiles: ["notification-admin", "all"]
+    mem_limit: 512m
+    cpus: "1.0"
     ports:
       - "127.0.0.1:${ADMIN_SERVICE_PORT:-8085}:9090"
+    environment:
+      BAL_CONFIG_DATA: |
+        kafkaRuntimeEnabled = true
+        kafkaBootstrap = "kafka:9092"
+        durableStateEnabled = true
+        mongoUri = "mongodb://${ADMIN_DB_USER:-admin_app}:${ADMIN_DB_APP_PASSWORD}@admin-db:27017/${ADMIN_DB_NAME:-admin}?authSource=${ADMIN_DB_NAME:-admin}"
     depends_on:
       kafka-init:
-        condition: service_completed_successfully
+        condition: service_started
       admin-db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:9090/admin/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f --max-time 4 http://localhost:9090/admin/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -179,17 +242,29 @@ services:
   notification-service:
     build: ../../services/notificationService
     profiles: ["notification-admin", "all"]
+    mem_limit: 512m
+    cpus: "1.0"
+    environment:
+      BAL_CONFIG_DATA: |
+        kafkaRuntimeEnabled = true
+        kafkaBootstrap = "kafka:9092"
+        durableStateEnabled = true
+        mongoUri = "mongodb://${NOTIFICATION_DB_USER:-notification_app}:${NOTIFICATION_DB_APP_PASSWORD}@notification-db:27017/${NOTIFICATION_DB_NAME:-notifications}?authSource=${NOTIFICATION_DB_NAME:-notifications}"
+        mongoDatabase = "${NOTIFICATION_DB_NAME:-notifications}"
+        redisHost = "notification-redis"
+        redisPort = 6379
     ports:
       - "127.0.0.1:${NOTIFICATION_SERVICE_PORT:-8083}:9090"
     depends_on:
       kafka-init:
-        condition: service_completed_successfully
+        condition: service_started
       notification-db:
         condition: service_healthy
       notification-redis:
         condition: service_healthy
+        required: false
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:9090/notification/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f --max-time 4 http://localhost:9090/notification/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -212,17 +287,32 @@ services:
   payment-service:
     build: ../../services/paymentService
     profiles: ["restaurant-payment", "all"]
+    mem_limit: 512m
+    cpus: "1.0"
+    environment:
+      BAL_CONFIG_DATA: |
+        kafkaRuntimeEnabled = true
+        kafkaBootstrap = "kafka:9092"
+        durableStateEnabled = true
+        mysqlHost = "payment-db"
+        mysqlPort = 3306
+        mysqlDatabase = "${PAYMENT_DB_NAME:-payment}"
+        mysqlUser = "${PAYMENT_DB_USER:-payment_app}"
+        mysqlPassword = "${PAYMENT_DB_APP_PASSWORD}"
+        redisHost = "payment-redis"
+        redisPort = 6379
     ports:
       - "127.0.0.1:${PAYMENT_SERVICE_PORT:-8084}:9090"
     depends_on:
       kafka-init:
-        condition: service_completed_successfully
+        condition: service_started
       payment-db:
         condition: service_healthy
       payment-redis:
         condition: service_healthy
+        required: false
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:9090/payment/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f --max-time 4 http://localhost:9090/payment/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -232,15 +322,27 @@ services:
   restaurant-service:
     build: ../../services/restaurantService
     profiles: ["restaurant-payment", "all"]
+    mem_limit: 512m
+    cpus: "1.0"
+    environment:
+      BAL_CONFIG_DATA: |
+        kafkaRuntimeEnabled = true
+        kafkaBootstrap = "kafka:9092"
+        durableStateEnabled = true
+        mysqlHost = "restaurant-db"
+        mysqlPort = 3306
+        mysqlDatabase = "${RESTAURANT_DB_NAME:-restaurant}"
+        mysqlUser = "${RESTAURANT_DB_USER:-restaurant_app}"
+        mysqlPassword = "${RESTAURANT_DB_APP_PASSWORD}"
     ports:
       - "127.0.0.1:${RESTAURANT_SERVICE_PORT:-8087}:9090"
     depends_on:
       kafka-init:
-        condition: service_completed_successfully
+        condition: service_started
       restaurant-db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:9090/restaurant/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f --max-time 4 http://localhost:9090/restaurant/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -263,6 +365,18 @@ services:
   delivery-service:
     build: ../../services/deliveryService
     profiles: ["delivery", "all"]
+    mem_limit: 512m
+    cpus: "1.0"
+    environment:
+      BAL_CONFIG_DATA: |
+        kafkaRuntimeEnabled = true
+        kafkaBootstrap = "kafka:9092"
+        durableStateEnabled = true
+        sqlServerHost = "delivery-db"
+        sqlServerPort = 1433
+        sqlServerDatabase = "delivery"
+        sqlServerUser = "sa"
+        sqlServerPassword = "${DELIVERY_DB_PASSWORD}"
     ports:
       - "127.0.0.1:${DELIVERY_SERVICE_PORT:-8086}:9090"
     depends_on:
@@ -273,7 +387,7 @@ services:
       delivery-db-init:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:9090/delivery/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f --max-time 4 http://localhost:9090/delivery/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -398,7 +512,9 @@ services:
         condition: service_healthy
     environment:
       SQLCMDPASSWORD: ${DELIVERY_DB_PASSWORD:?Set DELIVERY_DB_PASSWORD in .env}
-    command: ["/opt/mssql-tools18/bin/sqlcmd", "-S", "delivery-db", "-U", "sa", "-C", "-b", "-Q", "IF DB_ID('delivery') IS NULL CREATE DATABASE delivery;"]
+    volumes:
+      - ./initdb/delivery-db/01-schema.sql:/opt/app/01-schema.sql:ro
+    command: ["/bin/bash", "-c", "/opt/mssql-tools18/bin/sqlcmd -S delivery-db -U sa -C -b -Q \"IF DB_ID('delivery') IS NULL CREATE DATABASE delivery;\" && /opt/mssql-tools18/bin/sqlcmd -S delivery-db -U sa -C -b -d delivery -i /opt/app/01-schema.sql"]
     networks: [backbone]
 
   # Sholm
@@ -456,3 +572,4 @@ volumes:
   admin-db-data:
   payment-redis-data:
   notification-redis-data:
+  gateway-redis-data:

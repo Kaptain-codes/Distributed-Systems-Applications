@@ -1,0 +1,72 @@
+{
+  "last_build_time": 1791259855148,
+  "last_update_time": 1791259855148,
+  "last_bal_toml_update_time": 1791232967880,
+  "distribution_version": "2201.13.4",
+  "last_modified_time": {
+    "foodDeliveryClient": 1791259800373
+  },
+  "last_build_options": {
+    "compilationOptions": {
+      "observabilityIncluded": true,
+      "dumpBir": false,
+      "cloud": "",
+      "dumpGraph": false,
+      "dumpRawGraphs": false
+    }
+  },
+  "src_meta_info": [
+    {
+      "file": "C:\\Users\\wykva\\IdeaProjects\\Distributed-Systems-Applications\\Assignment-2\\client\\api.bal",
+      "hash": "d6c7c00626ad3339d3402eaa92351b8fd3ebf1426e7ef11f996ab1349e596d0f",
+      "size": 3783,
+      "lastModifiedTime": 1791233431376
+    },
+    {
+      "file": "C:\\Users\\wykva\\IdeaProjects\\Distributed-Systems-Applications\\Assignment-2\\client\\Ballerina.toml",
+      "hash": "084bdc0e10fd365ad550621f7394450f64b505f23a0953156bd52f14db187cd7",
+      "size": 157,
+      "lastModifiedTime": 1791232967880
+    },
+    {
+      "file": "C:\\Users\\wykva\\IdeaProjects\\Distributed-Systems-Applications\\Assignment-2\\client\\main.bal",
+      "hash": "792cf6b633d705ed28fa2e4a091f30a25851e9c2aee949f0b3a66ebed6695922",
+      "size": 16238,
+      "lastModifiedTime": 1791259800373
+    },
+    {
+      "file": "C:\\Users\\wykva\\IdeaProjects\\Distributed-Systems-Applications\\Assignment-2\\client\\state.bal",
+      "hash": "8d5442e135213d20cdc20bebefa3117cb595d44aec500ed4f50e12a00c20f8ba",
+      "size": 1393,
+      "lastModifiedTime": 1791236997464
+    }
+  ],
+  "target_exec_meta_info": {
+    "file": "C:\\Users\\wykva\\IdeaProjects\\Distributed-Systems-Applications\\Assignment-2\\client\\target\\backup\\bin\\foodDeliveryClient.jar",
+    "hash": "3ce89706327185f3c8b4d9fd90639b33581c14305e04003fe99dc1706c37d64e",
+    "size": 49228343,
+    "lastModifiedTime": 1791259858512
+  },
+  "settings_meta_info": {
+    "file": "C:\\Users\\wykva\\.ballerina\\Settings.toml",
+    "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "size": 0,
+    "lastModifiedTime": 1782327368914
+  },
+  "ballerina_toml_meta_info": {
+    "file": "C:\\Users\\wykva\\IdeaProjects\\Distributed-Systems-Applications\\Assignment-2\\client\\Ballerina.toml",
+    "hash": "084bdc0e10fd365ad550621f7394450f64b505f23a0953156bd52f14db187cd7",
+    "size": 157,
+    "lastModifiedTime": 1791232967880
+  },
+  "imports": [
+    "ballerina/log",
+    "ballerina/time",
+    "ballerina/uuid",
+    "ballerina/http",
+    "ballerina/lang.runtime",
+    "ballerina/file",
+    "ballerina/io",
+    "ballerina/test"
+  ]
+}

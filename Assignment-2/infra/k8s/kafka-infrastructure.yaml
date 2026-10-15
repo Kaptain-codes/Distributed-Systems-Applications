@@ -1,0 +1,109 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zookeeper
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: zookeeper}
+  template:
+    metadata:
+      labels: {app: zookeeper}
+    spec:
+      containers:
+        - name: zookeeper
+          image: confluentinc/cp-zookeeper:7.6.0
+          ports: [{name: client, containerPort: 2181}]
+          env:
+            - {name: ZOOKEEPER_CLIENT_PORT, value: "2181"}
+            - {name: ZOOKEEPER_TICK_TIME, value: "2000"}
+            - {name: KAFKA_HEAP_OPTS, value: "-Xms256m -Xmx256m"}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1000
+          resources: {requests: {cpu: "100m", memory: 512Mi}, limits: {cpu: "1", memory: 512Mi}}
+          readinessProbe: {tcpSocket: {port: client}, initialDelaySeconds: 15, periodSeconds: 10}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zookeeper
+spec:
+  selector: {app: zookeeper}
+  ports: [{name: client, port: 2181, targetPort: client}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: kafka}
+  template:
+    metadata:
+      labels: {app: kafka}
+    spec:
+      containers:
+        - name: kafka
+          image: confluentinc/cp-kafka:7.6.0
+          ports:
+            - {name: internal, containerPort: 9092}
+            - {name: host, containerPort: 29092}
+          env:
+            - {name: KAFKA_BROKER_ID, value: "1"}
+            - {name: KAFKA_ZOOKEEPER_CONNECT, value: zookeeper:2181}
+            - {name: KAFKA_ADVERTISED_LISTENERS, value: "PLAINTEXT://kafka:9092,PLAINTEXT_HOST://kafka:29092"}
+            - {name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP, value: "PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT"}
+            - {name: KAFKA_LISTENERS, value: "PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092"}
+            - {name: KAFKA_INTER_BROKER_LISTENER_NAME, value: PLAINTEXT}
+            - {name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR, value: "1"}
+            - {name: KAFKA_AUTO_CREATE_TOPICS_ENABLE, value: "false"}
+            - {name: KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS, value: "0"}
+            - {name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR, value: "1"}
+            - {name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR, value: "1"}
+            - {name: KAFKA_HEAP_OPTS, value: "-Xms512m -Xmx512m"}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1000
+          resources: {requests: {cpu: "500m", memory: 1Gi}, limits: {cpu: "2", memory: 1Gi}}
+          readinessProbe: {tcpSocket: {port: internal}, initialDelaySeconds: 30, periodSeconds: 10}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+spec:
+  selector: {app: kafka}
+  ports:
+    - {name: internal, port: 9092, targetPort: internal}
+    - {name: host, port: 29092, targetPort: host}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kafka-init
+spec:
+  backoffLimit: 6
+  template:
+    metadata:
+      labels: {app: kafka-init}
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: topic-creator
+          image: confluentinc/cp-kafka:7.6.0
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1000
+          command: [/bin/bash, -ec]
+          args:
+            - |
+              until kafka-topics --bootstrap-server kafka:9092 --list >/dev/null 2>&1; do sleep 2; done
+              for topic in orders.created orders.confirmed orders.preparing orders.ready orders.out_for_delivery orders.delivered orders.cancelled orders.autocancelled payments.completed payment.requested payments.failed payments.cancelled payments.refunded restaurant.accepted restaurant.rejected restaurant.preparing restaurant.ready delivery.assigned delivery.picked_up delivery.not_assigned delivery.completed delivery.cancelled delivery.failed orders.created.dlq payment.requested.dlq orders.confirmed.dlq orders.preparing.dlq orders.ready.dlq orders.out_for_delivery.dlq orders.delivered.dlq orders.cancelled.dlq orders.autocancelled.dlq payments.completed.dlq payments.failed.dlq payments.cancelled.dlq payments.refunded.dlq restaurant.accepted.dlq restaurant.rejected.dlq restaurant.preparing.dlq restaurant.ready.dlq delivery.assigned.dlq delivery.picked_up.dlq delivery.not_assigned.dlq delivery.completed.dlq delivery.cancelled.dlq delivery.failed.dlq; do kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic "$topic" --partitions 3 --replication-factor 1; done
