@@ -1,0 +1,244 @@
+# Food delivery platform. Start everything with:  docker compose up -d
+#
+# 11 containers: the 7 Ballerina services, MongoDB, Kafka, the API gateway and the web console.
+# Web console: http://localhost:3000   API gateway: http://localhost:8080/api/...
+
+name: food-delivery
+
+networks:
+  backbone:
+    driver: bridge
+
+x-service: &service
+  restart: on-failure
+  networks: [backbone]
+
+x-health: &health
+  interval: 10s
+  timeout: 5s
+  retries: 12
+  start_period: 20s
+
+# Services that only need MongoDB.
+x-needs-mongodb: &needs-mongodb
+  mongodb: {condition: service_healthy}
+
+# Services that also publish or consume Kafka events.
+x-needs-mongodb-and-kafka: &needs-mongodb-and-kafka
+  mongodb: {condition: service_healthy}
+  kafka: {condition: service_healthy}
+
+services:
+
+  # ---------------------------------------------------------------
+  # MongoDB: one instance, database `food_delivery`. Each service reads and writes only its own
+  # collections. mongodb/*.js create the collections, validators and indexes on first start.
+  # ---------------------------------------------------------------
+  mongodb:
+    image: mongo:7
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-food_delivery}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-food_delivery_dev}
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb-data:/data/db
+      - ./mongodb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      <<: *health
+      # CMD-SHELL (not exec form) so $$VARS expand inside the container.
+      test: ["CMD-SHELL", "mongosh --quiet -u \"$$MONGO_INITDB_ROOT_USERNAME\" -p \"$$MONGO_INITDB_ROOT_PASSWORD\" --authenticationDatabase admin --eval \"db.adminCommand('ping')\" || exit 1"]
+    networks: [backbone]
+
+  # ---------------------------------------------------------------
+  # Kafka in KRaft mode (no ZooKeeper). Topics are created automatically, with 3 partitions,
+  # the first time a service publishes to or subscribes to them.
+  # ---------------------------------------------------------------
+  kafka:
+    image: apache/kafka:3.9.2
+    restart: unless-stopped
+    environment:
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,PLAINTEXT_HOST://:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: 3
+    ports:
+      - "29092:29092"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      <<: *health
+      timeout: 15s
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list > /dev/null 2>&1"]
+    networks: [backbone]
+
+  # ---------------------------------------------------------------
+  # The 7 services. Settings are Ballerina TOML in BAL_CONFIG_DATA; each listens on 9090 inside
+  # the network and is published on its own host port.
+  # ---------------------------------------------------------------
+  order-service:
+    <<: *service
+    build: ../../services/orderService
+    environment:
+      BAL_CONFIG_DATA: |
+        servicePort = 9090
+        databaseBackend = "mongodb"
+        mongodbConnectionUri = "mongodb://${MONGO_USER:-food_delivery}:${MONGO_PASSWORD:-food_delivery_dev}@mongodb:27017/?authSource=admin"
+        mongodbDatabase = "food_delivery"
+        kafkaEnabled = true
+        kafkaBootstrapServers = "kafka:9092"
+    ports:
+      - "8081:9090"
+    depends_on: *needs-mongodb-and-kafka
+    healthcheck:
+      <<: *health
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9090/orders/health || exit 1"]
+
+  customer-service:
+    <<: *service
+    build: ../../services/customerService
+    environment:
+      BAL_CONFIG_DATA: |
+        servicePort = 9090
+        databaseBackend = "mongodb"
+        mongodbConnectionUri = "mongodb://${MONGO_USER:-food_delivery}:${MONGO_PASSWORD:-food_delivery_dev}@mongodb:27017/?authSource=admin"
+        mongodbDatabase = "food_delivery"
+    ports:
+      - "8082:9090"
+    depends_on: *needs-mongodb
+    healthcheck:
+      <<: *health
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9090/customers/health || exit 1"]
+
+  notification-service:
+    <<: *service
+    build: ../../services/notificationService
+    environment:
+      BAL_CONFIG_DATA: |
+        servicePort = 9090
+        databaseBackend = "mongodb"
+        mongodbConnectionUri = "mongodb://${MONGO_USER:-food_delivery}:${MONGO_PASSWORD:-food_delivery_dev}@mongodb:27017/?authSource=admin"
+        mongodbDatabase = "food_delivery"
+        kafkaEnabled = true
+        kafkaBootstrapServers = "kafka:9092"
+    ports:
+      - "8083:9090"
+    depends_on: *needs-mongodb-and-kafka
+    healthcheck:
+      <<: *health
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9090/notifications/health || exit 1"]
+
+  payment-service:
+    <<: *service
+    build: ../../services/paymentService
+    environment:
+      BAL_CONFIG_DATA: |
+        servicePort = 9090
+        databaseBackend = "mongodb"
+        mongodbConnectionUri = "mongodb://${MONGO_USER:-food_delivery}:${MONGO_PASSWORD:-food_delivery_dev}@mongodb:27017/?authSource=admin"
+        mongodbDatabase = "food_delivery"
+        kafkaEnabled = true
+        kafkaBootstrapServers = "kafka:9092"
+    ports:
+      - "8084:9090"
+    depends_on: *needs-mongodb-and-kafka
+    healthcheck:
+      <<: *health
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9090/payments/health || exit 1"]
+
+  admin-service:
+    <<: *service
+    build: ../../services/adminService
+    environment:
+      BAL_CONFIG_DATA: |
+        servicePort = 9090
+        databaseBackend = "mongodb"
+        mongodbConnectionUri = "mongodb://${MONGO_USER:-food_delivery}:${MONGO_PASSWORD:-food_delivery_dev}@mongodb:27017/?authSource=admin"
+        mongodbDatabase = "food_delivery"
+    ports:
+      - "8085:9090"
+    depends_on: *needs-mongodb
+    healthcheck:
+      <<: *health
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9090/admin/reports/health || exit 1"]
+
+  delivery-service:
+    <<: *service
+    build: ../../services/deliveryService
+    environment:
+      BAL_CONFIG_DATA: |
+        servicePort = 9090
+        databaseBackend = "mongodb"
+        mongodbConnectionUri = "mongodb://${MONGO_USER:-food_delivery}:${MONGO_PASSWORD:-food_delivery_dev}@mongodb:27017/?authSource=admin"
+        mongodbDatabase = "food_delivery"
+        kafkaEnabled = true
+        kafkaBootstrapServers = "kafka:9092"
+    ports:
+      - "8086:9090"
+    depends_on: *needs-mongodb-and-kafka
+    healthcheck:
+      <<: *health
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9090/delivery/health || exit 1"]
+
+  restaurant-service:
+    <<: *service
+    build: ../../services/restaurantService
+    environment:
+      BAL_CONFIG_DATA: |
+        servicePort = 9090
+        databaseBackend = "mongodb"
+        mongodbConnectionUri = "mongodb://${MONGO_USER:-food_delivery}:${MONGO_PASSWORD:-food_delivery_dev}@mongodb:27017/?authSource=admin"
+        mongodbDatabase = "food_delivery"
+    ports:
+      - "8087:9090"
+    depends_on: *needs-mongodb
+    healthcheck:
+      <<: *health
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9090/restaurants/health || exit 1"]
+
+  # ---------------------------------------------------------------
+  # API gateway: /api/{service}/... -> that service.
+  # ---------------------------------------------------------------
+  gateway:
+    <<: *service
+    build: ../../gateway
+    ports:
+      - "8080:8080"
+    depends_on:
+      order-service: {condition: service_healthy}
+      customer-service: {condition: service_healthy}
+      notification-service: {condition: service_healthy}
+      payment-service: {condition: service_healthy}
+      admin-service: {condition: service_healthy}
+      delivery-service: {condition: service_healthy}
+      restaurant-service: {condition: service_healthy}
+    healthcheck:
+      <<: *health
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8080/api/health || exit 1"]
+
+  # ---------------------------------------------------------------
+  # Web console. nginx serves it and proxies /api to the gateway.
+  # ---------------------------------------------------------------
+  frontend:
+    <<: *service
+    build: ../../frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - gateway
+
+volumes:
+  mongodb-data:
+  kafka-data:

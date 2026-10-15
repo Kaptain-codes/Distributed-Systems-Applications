@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Food Delivery Console</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,400..800;1,100,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            ink: { DEFAULT: "#1e2a5a", 900: "#141c3f", 700: "#2c3a72", 500: "#56608c", 300: "#9aa1c0", 200: "#c9cde0", 100: "#e4e6f0" },
+            paper: { DEFAULT: "#f6f4ec", deep: "#ece8da", white: "#fffefa" },
+            copy: { white: "#fffefa", canary: "#f2dc6b", pink: "#f0b6c4", blue: "#b7d0ec", green: "#bfe0b8" },
+            perf: { DEFAULT: "#c8352e", dark: "#a8261f" },
+            ok: "#2b7a3d",
+            warn: "#b26a00",
+          },
+          fontFamily: {
+            sans: ["Archivo", "system-ui", "sans-serif"],
+            mono: ["'JetBrains Mono'", "ui-monospace", "monospace"],
+          },
+          borderRadius: { DEFAULT: "2px", sm: "1px" },
+        },
+      },
+    };
+  </script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="bg-paper text-ink font-sans antialiased">
+  <a href="#view" class="skip-link">Skip to content</a>
+
+  <div class="min-h-screen lg:grid lg:grid-cols-[248px_1fr]">
+    <!-- Carbon rail: the seven services, each with its port and a live health lamp -->
+    <aside class="rail bg-ink text-ink-100 lg:sticky lg:top-0 lg:h-screen flex flex-col">
+      <div class="flex items-center justify-between px-5 pt-5 pb-4 lg:pb-6">
+        <a href="#/" class="block leading-none focus-ring rounded">
+          <span class="wordmark block">Food Delivery</span>
+          <span class="block text-[11px] tracking-[0.16em] uppercase text-ink-300 mt-1.5">Operator console</span>
+        </a>
+        <button id="rail-toggle" class="lg:hidden p-2 -mr-2 rounded focus-ring" aria-expanded="false" aria-controls="rail-nav" aria-label="Open navigation">
+          <i data-lucide="menu" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <nav id="rail-nav" class="hidden lg:flex flex-col flex-1 px-3 pb-4 gap-0.5 overflow-y-auto" aria-label="Sections"></nav>
+
+      <div id="rail-health" class="hidden lg:block px-5 py-4 border-t border-ink-700 text-[12px] text-ink-200" aria-live="polite"></div>
+    </aside>
+
+    <main id="view" tabindex="-1" class="min-w-0 px-4 sm:px-8 lg:px-10 py-6 lg:py-8 outline-none"></main>
+  </div>
+
+  <!-- Form sheet: slides in from the right, like a fresh blank form pulled from the pad -->
+  <div id="sheet-backdrop" class="sheet-backdrop" hidden></div>
+  <section id="sheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" hidden>
+    <form id="sheet-form" class="flex flex-col h-full" novalidate>
+      <header class="sheet-head">
+        <h2 id="sheet-title" class="heading text-2xl"></h2>
+        <button type="button" data-close class="p-2 -mr-2 rounded focus-ring" aria-label="Close form">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </header>
+      <div id="sheet-error" class="form-error mx-6 mt-4" role="alert" hidden></div>
+      <div id="sheet-body" class="flex-1 overflow-y-auto px-6 py-5 space-y-5"></div>
+      <footer class="sheet-foot">
+        <button type="button" data-close class="btn btn-ghost">Cancel</button>
+        <button type="submit" id="sheet-submit" class="btn btn-primary"></button>
+      </footer>
+    </form>
+  </section>
+
+  <div id="toasts" class="toasts" aria-live="polite" aria-atomic="false"></div>
+
+  <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
